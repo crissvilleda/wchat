@@ -20,11 +20,10 @@ class _FakeHttpRequest:
 
 
 @pytest.mark.asyncio
-async def test_get_returns_ok():
+async def test_get_returns_405():
     req = _FakeHttpRequest("GET", {})
     resp = await redirect_msgs(req)
-    assert resp.status_code == 200
-    assert resp.get_body() == b"ok"
+    assert resp.status_code == 405
 
 
 @pytest.mark.asyncio
@@ -54,6 +53,29 @@ async def test_post_forwards_body_and_content_type():
         resp = await redirect_msgs(req)
         assert resp.status_code == 200
         assert resp.get_body() == b"downstream-body"
+        m.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_patch_forwards_body_and_content_type():
+    downstream = "http://downstream.test/hook"
+    payload = b'{"x":1}'
+    with aioresponses.aioresponses() as m:
+        m.patch(
+            downstream,
+            status=200,
+            body=b"patched",
+            content_type="application/json",
+        )
+        req = _FakeHttpRequest(
+            "PATCH",
+            {"redirect_to": downstream},
+            body=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        resp = await redirect_msgs(req)
+        assert resp.status_code == 200
+        assert resp.get_body() == b"patched"
         m.assert_called_once()
 
 

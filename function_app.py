@@ -1,4 +1,4 @@
-"""HTTP proxy for Twilio-shaped POSTs to a configurable downstream URL.
+"""HTTP proxy for Twilio-shaped POST or PATCH requests to a configurable downstream URL.
 
 Webhook URL for Twilio should include the function key, e.g.
 ``.../redirect_msgs?code=<FUNCTION_KEY>&redirect_to=<encoded downstream URL>``,
@@ -80,12 +80,17 @@ def _client_timeout() -> aiohttp.ClientTimeout:
 
 @app.route(
     route="redirect_msgs",
-    methods=["GET", "POST"],
+    methods=["POST", "PATCH"],
     auth_level=func.AuthLevel.FUNCTION,
 )
 async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
-    if req.method == "GET":
-        return func.HttpResponse("ok", status_code=200, mimetype="text/plain")
+    method = req.method.upper()
+    if method not in ("POST", "PATCH"):
+        return func.HttpResponse(
+            "Method Not Allowed",
+            status_code=405,
+            mimetype="text/plain",
+        )
 
     redirect_to = req.params.get("redirect_to")
     if not redirect_to or not redirect_to.strip():
@@ -117,7 +122,7 @@ async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         async with aiohttp.ClientSession(**session_kwargs) as session:
-            async with session.post(redirect_to, data=body, headers=headers) as resp:
+            async with session.request(method, redirect_to, data=body, headers=headers) as resp:
                 downstream_body = await resp.read()
                 out_ct = resp.headers.get("Content-Type", "application/octet-stream")
 
