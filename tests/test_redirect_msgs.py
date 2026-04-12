@@ -1,9 +1,10 @@
+import json
 import urllib.parse
 
 import aioresponses
 import pytest
 
-from function_app import redirect_msgs
+from function_app import dummy_redirect_echo, redirect_msgs
 
 
 class _FakeHttpRequest:
@@ -86,3 +87,20 @@ async def test_post_downstream_non_2xx_returns_502():
         resp = await redirect_msgs(req)
         assert resp.status_code == 502
         assert b"Bad Gateway" in resp.get_body()
+
+
+@pytest.mark.asyncio
+async def test_dummy_redirect_echo_post_returns_json_echo():
+    req = _FakeHttpRequest(
+        "POST",
+        {},
+        body=b"a=1&b=two",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    resp = await dummy_redirect_echo(req)
+    assert resp.status_code == 200
+    data = json.loads(resp.get_body().decode())
+    assert data["ok"] is True
+    assert data["body"] == "a=1&b=two"
+    assert data["body_length"] == 9
+    assert data["content_type"] == "application/x-www-form-urlencoded"

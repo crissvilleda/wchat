@@ -7,6 +7,7 @@ let anyone use the app as an open HTTP proxy—only do that in isolated tests.
 """
 
 import asyncio
+import json
 import logging
 import os
 from urllib.parse import unquote
@@ -87,3 +88,34 @@ async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
             status_code=502,
             mimetype="text/plain",
         )
+
+
+@app.route(
+    route="dummy_redirect_echo",
+    methods=["POST"],
+    auth_level=func.AuthLevel.FUNCTION,
+)
+async def dummy_redirect_echo(req: func.HttpRequest) -> func.HttpResponse:
+    """Local/test sink: accepts POST only. Use as ``redirect_to`` to verify the proxy.
+
+    Example (func host): ``http://localhost:7071/api/dummy_redirect_echo?code=...``
+    """
+
+    raw = req.get_body() or b""
+    ct = req.headers.get("Content-Type") or "application/octet-stream"
+    try:
+        body_text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        body_text = raw.decode("utf-8", errors="replace")
+
+    payload = {
+        "ok": True,
+        "content_type": ct,
+        "body_length": len(raw),
+        "body": body_text,
+    }
+    return func.HttpResponse(
+        json.dumps(payload, ensure_ascii=False),
+        status_code=200,
+        mimetype="application/json; charset=utf-8",
+    )
