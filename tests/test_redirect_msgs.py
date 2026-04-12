@@ -109,12 +109,23 @@ async def test_dummy_redirect_echo_post_returns_json_echo():
 
 def test_downstream_connector_none_when_insecure_ssl_disabled(monkeypatch):
     monkeypatch.delenv("DOWNSTREAM_INSECURE_SSL", raising=False)
+    monkeypatch.delenv("APPSETTING_DOWNSTREAM_INSECURE_SSL", raising=False)
     assert _downstream_connector() is None
 
 
 @pytest.mark.asyncio
 async def test_downstream_connector_tcp_when_insecure_ssl_enabled(monkeypatch):
     monkeypatch.setenv("DOWNSTREAM_INSECURE_SSL", "1")
+    conn = _downstream_connector()
+    assert conn is not None
+    assert isinstance(conn, aiohttp.TCPConnector)
+    await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_downstream_connector_accepts_appsetting_prefix(monkeypatch):
+    monkeypatch.delenv("DOWNSTREAM_INSECURE_SSL", raising=False)
+    monkeypatch.setenv("APPSETTING_DOWNSTREAM_INSECURE_SSL", "1")
     conn = _downstream_connector()
     assert conn is not None
     assert isinstance(conn, aiohttp.TCPConnector)

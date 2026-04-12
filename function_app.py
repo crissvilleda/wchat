@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import os
+import ssl
 from urllib.parse import unquote
 
 import aiohttp
@@ -27,11 +28,32 @@ _ENV_TIMEOUT = "DOWNSTREAM_TIMEOUT_SECONDS"
 _ENV_INSECURE_SSL = "DOWNSTREAM_INSECURE_SSL"
 
 
-def _env_truthy(name: str) -> bool:
+def _get_app_setting(name: str) -> str | None:
+    """Read env var; on Azure App Service / Functions the same value may appear with an ``APPSETTING_`` prefix."""
     raw = os.environ.get(name)
-    if raw is None or raw.strip() == "":
+    if raw is not None and raw.strip() != "":
+        return raw
+    prefixed = os.environ.get(f"APPSETTING_{name}")
+    if prefixed is not None and prefixed.strip() != "":
+        return prefixed
+    return None
+
+
+def _env_truthy(name: str) -> bool:
+    raw = _get_app_setting(name)
+    if raw is None:
         return False
-    return raw.strip().lower() in ("1", "true", "yes", "on")
+    raw = raw.strip().strip('"').strip("'")
+    if raw == "":
+        return False
+    return raw.lower() in ("1", "true", "yes", "on")
+
+
+def _unverified_ssl_context() -> ssl.SSLContext:
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
 
 
 def _downstream_connector() -> aiohttp.TCPConnector | None:
@@ -41,7 +63,7 @@ def _downstream_connector() -> aiohttp.TCPConnector | None:
         "%s is set: downstream HTTPS certificate verification is disabled (use only for testing)",
         _ENV_INSECURE_SSL,
     )
-    return aiohttp.TCPConnector(ssl=False)
+    return aiohttp.TCPConnector(ssl=_unverified_ssl_context())
 
 
 def _client_timeout() -> aiohttp.ClientTimeout:
@@ -85,6 +107,13 @@ async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
     session_kwargs = {"timeout": timeout}
     if connector is not None:
         session_kwargs["connector"] = connector
+
+    logging.info(
+        "redirect_msgs downstream TLS verify=%s %s=%r",
+        "off" if connector is not None else "on",
+        _ENV_INSECURE_SSL,
+        _get_app_setting(_ENV_INSECURE_SSL),
+    )
 
     try:
         async with aiohttp.ClientSession(**session_kwargs) as session:
