@@ -114,7 +114,9 @@ async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
         session_kwargs["connector"] = connector
 
     logging.info(
-        "redirect_msgs downstream TLS verify=%s %s=%r",
+        "redirect_msgs method=%s redirect_to=%r downstream TLS verify=%s %s=%r",
+        method,
+        redirect_to,
         "off" if connector is not None else "on",
         _ENV_INSECURE_SSL,
         _get_app_setting(_ENV_INSECURE_SSL),
@@ -134,8 +136,9 @@ async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
                     )
 
                 logging.warning(
-                    "Downstream returned non-success status %s for redirect_to",
+                    "Downstream returned non-success status %s redirect_to=%r",
                     resp.status,
+                    redirect_to,
                 )
                 return func.HttpResponse(
                     "Bad Gateway",
@@ -143,7 +146,11 @@ async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
                     mimetype="text/plain",
                 )
     except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-        logging.exception("Downstream request failed: %s", exc)
+        logging.exception(
+            "Downstream request failed redirect_to=%r: %s",
+            redirect_to,
+            exc,
+        )
         return func.HttpResponse(
             "Bad Gateway",
             status_code=502,
