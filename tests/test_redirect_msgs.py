@@ -1,10 +1,11 @@
 import json
 import urllib.parse
 
+import aiohttp
 import aioresponses
 import pytest
 
-from function_app import dummy_redirect_echo, redirect_msgs
+from function_app import _downstream_connector, dummy_redirect_echo, redirect_msgs
 
 
 class _FakeHttpRequest:
@@ -104,3 +105,17 @@ async def test_dummy_redirect_echo_post_returns_json_echo():
     assert data["body"] == "a=1&b=two"
     assert data["body_length"] == 9
     assert data["content_type"] == "application/x-www-form-urlencoded"
+
+
+def test_downstream_connector_none_when_insecure_ssl_disabled(monkeypatch):
+    monkeypatch.delenv("DOWNSTREAM_INSECURE_SSL", raising=False)
+    assert _downstream_connector() is None
+
+
+@pytest.mark.asyncio
+async def test_downstream_connector_tcp_when_insecure_ssl_enabled(monkeypatch):
+    monkeypatch.setenv("DOWNSTREAM_INSECURE_SSL", "1")
+    conn = _downstream_connector()
+    assert conn is not None
+    assert isinstance(conn, aiohttp.TCPConnector)
+    await conn.close()

@@ -4,6 +4,10 @@ Webhook URL for Twilio should include the function key, e.g.
 ``.../redirect_msgs?code=<FUNCTION_KEY>&redirect_to=<encoded downstream URL>``,
 because this route uses ``AuthLevel.FUNCTION``. Switching to ``ANONYMOUS`` would
 let anyone use the app as an open HTTP proxy—only do that in isolated tests.
+
+Set ``DOWNSTREAM_INSECURE_SSL`` to ``1``/``true``/``yes``/``on`` only when testing
+against HTTPS endpoints with self-signed certificates; it disables TLS verification
+for the outbound aiohttp client.
 """
 
 import asyncio
@@ -19,6 +23,25 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 _DEFAULT_TIMEOUT_S = 30.0
 _ENV_TIMEOUT = "DOWNSTREAM_TIMEOUT_SECONDS"
+# When truthy, disables TLS certificate verification for downstream HTTPS (self-signed / dev only).
+_ENV_INSECURE_SSL = "DOWNSTREAM_INSECURE_SSL"
+
+
+def _env_truthy(name: str) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return False
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _downstream_connector() -> aiohttp.TCPConnector | None:
+    if not _env_truthy(_ENV_INSECURE_SSL):
+        return None
+    logging.warning(
+        "%s is set: downstream HTTPS certificate verification is disabled (use only for testing)",
+        _ENV_INSECURE_SSL,
+    )
+    return aiohttp.TCPConnector(ssl=False)
 
 
 def _client_timeout() -> aiohttp.ClientTimeout:
@@ -58,9 +81,13 @@ async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
 
     headers = {"Content-Type": content_type}
     timeout = _client_timeout()
+    connector = _downstream_connector()
+    session_kwargs = {"timeout": timeout}
+    if connector is not None:
+        session_kwargs["connector"] = connector
 
     try:
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with aiohttp.ClientSession(**session_kwargs) as session:
             async with session.post(redirect_to, data=body, headers=headers) as resp:
                 downstream_body = await resp.read()
                 out_ct = resp.headers.get("Content-Type", "application/octet-stream")
