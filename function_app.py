@@ -208,7 +208,7 @@ async def whatsapp_webhook(req: func.HttpRequest) -> func.HttpResponse:
 
     # --- Build your reply here ---
     # Replace this stub with whatever response logic you need.
-    output: str | None = None  # set to the text you want to send back
+    output: str | None = "Test 123"  # set to the text you want to send back
 
     if output:
         account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
