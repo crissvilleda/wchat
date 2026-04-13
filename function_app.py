@@ -92,6 +92,23 @@ async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="text/plain",
         )
 
+
+    ## Obtener cliente
+        ## Buscar por numero o buscar por id
+
+    ## Obtener cuentas del cliente
+        ## Enviar plantilla de whatsapp con opciones
+        
+    ## Obtener token del ultimo correo de la cuenta
+        ## Buscar en gmail
+        ## Obtener el token de la cuenta selecionada
+
+
+    ## Responde con el token al usuario
+
+
+    
+
     redirect_to = req.params.get("redirect_to")
     if not redirect_to or not redirect_to.strip():
         return func.HttpResponse(
