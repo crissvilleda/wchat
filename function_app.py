@@ -20,6 +20,9 @@ from urllib.parse import unquote
 import aiohttp
 import azure.functions as func
 
+from request_utils import get_body_from_request
+from schemas import MessageSchema
+
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 _DEFAULT_TIMEOUT_S = 30.0
@@ -173,6 +176,53 @@ async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
             status_code=502,
             mimetype="text/plain",
         )
+
+
+@app.route(
+    route="whatsapp/webhook",
+    methods=["POST"],
+    auth_level=func.AuthLevel.FUNCTION,
+)
+async def whatsapp_webhook(req: func.HttpRequest) -> func.HttpResponse:
+    """Receive incoming Twilio WhatsApp webhook, parse it, and send a reply.
+
+    Twilio POSTs ``application/x-www-form-urlencoded`` form data.  We parse it
+    into a ``MessageSchema`` and then use the Twilio async client to respond.
+
+    Environment variables required:
+        TWILIO_ACCOUNT_SID  – Twilio account SID
+        TWILIO_AUTH_TOKEN   – Twilio auth token
+    """
+    from twilio.rest import Client
+    from twilio.http.async_http_client import AsyncTwilioHttpClient
+
+    body = get_body_from_request(req)
+    message = MessageSchema(**body)
+
+    logging.info(
+        "whatsapp_webhook wa_id=%s from=%s type=%s",
+        message.wa_id,
+        message.from_,
+        message.message_type,
+    )
+
+    # --- Build your reply here ---
+    # Replace this stub with whatever response logic you need.
+    output: str | None = None  # set to the text you want to send back
+
+    if output:
+        account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+        auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+        http_client = AsyncTwilioHttpClient()
+        twilio_client = Client(account_sid, auth_token, http_client=http_client)
+        await twilio_client.messages.create_async(
+            body=output,
+            from_=message.to,
+            to=message.from_,
+        )
+
+    # Twilio expects a 200 to acknowledge receipt of the webhook.
+    return func.HttpResponse(status_code=200)
 
 
 @app.route(
