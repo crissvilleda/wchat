@@ -23,10 +23,15 @@ from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2.credentials import Credentials
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-_TOKENS_FILE = "tokens.json"
-_ENV_CREDENTIALS = "GMAIL_CREDENTIALS_JSON"
 
 _GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
+
+# Env vars — cada campo de tokens.json como variable independiente
+_ENV_TOKEN         = "GMAIL_TOKEN"
+_ENV_REFRESH_TOKEN = "GMAIL_REFRESH_TOKEN"
+_ENV_TOKEN_URI     = "GMAIL_TOKEN_URI"
+_ENV_CLIENT_ID     = "GMAIL_CLIENT_ID"
+_ENV_CLIENT_SECRET = "GMAIL_CLIENT_SECRET"
 
 
 # ---------------------------------------------------------------------------
@@ -34,30 +39,43 @@ _GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 # ---------------------------------------------------------------------------
 
 def _load_credentials() -> Credentials | None:
-    """Load credentials from env var or local tokens file."""
-    raw = os.environ.get(_ENV_CREDENTIALS)
-    if raw:
-        logging.info("gmail_utils: loading credentials from env var %s", _ENV_CREDENTIALS)
-        data = json.loads(raw)
-    elif os.path.exists(_TOKENS_FILE):
-        logging.info("gmail_utils: loading credentials from file %s", _TOKENS_FILE)
-        with open(_TOKENS_FILE) as f:
-            data = json.load(f)
-    else:
-        logging.warning(
-            "gmail_utils: no credentials found — set %s env var or provide %s",
-            _ENV_CREDENTIALS,
-            _TOKENS_FILE,
-        )
+    """Load credentials from individual environment variables.
+
+    Variables required:
+        GMAIL_TOKEN          – access token
+        GMAIL_REFRESH_TOKEN  – refresh token
+        GMAIL_TOKEN_URI      – token endpoint (https://oauth2.googleapis.com/token)
+        GMAIL_CLIENT_ID      – OAuth client ID
+        GMAIL_CLIENT_SECRET  – OAuth client secret
+    """
+    token         = os.environ.get(_ENV_TOKEN)
+    refresh_token = os.environ.get(_ENV_REFRESH_TOKEN)
+    token_uri     = os.environ.get(_ENV_TOKEN_URI)
+    client_id     = os.environ.get(_ENV_CLIENT_ID)
+    client_secret = os.environ.get(_ENV_CLIENT_SECRET)
+
+    missing = [
+        name for name, val in {
+            _ENV_TOKEN: token,
+            _ENV_REFRESH_TOKEN: refresh_token,
+            _ENV_TOKEN_URI: token_uri,
+            _ENV_CLIENT_ID: client_id,
+            _ENV_CLIENT_SECRET: client_secret,
+        }.items() if not val
+    ]
+
+    if missing:
+        logging.warning("gmail_utils: missing env vars: %s", missing)
         return None
 
+    logging.info("gmail_utils: credentials loaded from environment variables")
     return Credentials(
-        token=data["token"],
-        refresh_token=data.get("refresh_token"),
-        token_uri=data["token_uri"],
-        client_id=data["client_id"],
-        client_secret=data["client_secret"],
-        scopes=data.get("scopes", SCOPES),
+        token=token,
+        refresh_token=refresh_token,
+        token_uri=token_uri,
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=SCOPES,
     )
 
 
