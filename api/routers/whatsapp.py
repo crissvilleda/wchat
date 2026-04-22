@@ -1,17 +1,17 @@
 import asyncio
 import logging
 import os
-from typing import Any, Dict
+from typing import Annotated, Any
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
 import gmail_utils
 from schemas import MessageSchema
 
 
-router = APIRouter()
+router = APIRouter(prefix="/whatsapp")
 
 # Servicios disponibles: keyword → consulta de Gmail
 SERVICES: dict[str, str] = {
@@ -22,7 +22,7 @@ _TWILIO_ACCOUNT_SID_ENV = "TWILIO_ACCOUNT_SID"
 _TWILIO_AUTH_TOKEN_ENV = "TWILIO_AUTH_TOKEN"
 
 
-async def _body_from_request(request: Request) -> Dict[str, Any]:
+async def get_whatsapp_body(request: Request) -> dict[str, Any]:
     ct = (request.headers.get("content-type") or "").lower()
 
     if "application/json" in ct:
@@ -40,19 +40,26 @@ async def _body_from_request(request: Request) -> Dict[str, Any]:
         raw_text = raw.decode("utf-8", errors="replace")
 
     parsed = parse_qs(raw_text)
-    body: Dict[str, Any] = {}
+    body: dict[str, Any] = {}
     for key, value in parsed.items():
         body[key] = value[0] if len(value) == 1 else value
     return body
 
 
-@router.post("/whatsapp/webhook", status_code=200)
-async def whatsapp_webhook(request: Request) -> Response:
+async def get_whatsapp_message(
+    body: Annotated[dict[str, Any], Depends(get_whatsapp_body)],
+) -> MessageSchema:
+    return MessageSchema.model_validate(body)
+
+
+WhatsappBody = Annotated[dict[str, Any], Depends(get_whatsapp_body)]
+WhatsappMessage = Annotated[MessageSchema, Depends(get_whatsapp_message)]
+
+
+@router.post("/webhook", status_code=200)
+async def whatsapp_webhook(message: WhatsappMessage) -> Response:
     from twilio.http.async_http_client import AsyncTwilioHttpClient
     from twilio.rest import Client
-
-    body = await _body_from_request(request)
-    message = MessageSchema.model_validate(body)
 
     client_number = message.from_
     logging.info(
@@ -70,12 +77,14 @@ async def whatsapp_webhook(request: Request) -> Response:
         list(SERVICES),
     )
 
-    matched_service: str | None = next((key for key in SERVICES if key in user_text), None)
+    matched_service: str | None = next(
+        (key for key in SERVICES if key in user_text), None)
     logging.info("whatsapp_webhook matched_service=%r", matched_service)
 
     if matched_service:
         query = SERVICES[matched_service]
-        logging.info("whatsapp_webhook fetching OTP from Gmail query=%r", query)
+        logging.info(
+            "whatsapp_webhook fetching OTP from Gmail query=%r", query)
         otp = await asyncio.to_thread(gmail_utils.get_latest_otp, query)
         logging.info("whatsapp_webhook otp_found=%s", bool(otp))
 
@@ -88,7 +97,8 @@ async def whatsapp_webhook(request: Request) -> Response:
         options = "\n".join(f"• {name.capitalize()}" for name in SERVICES)
         output = f"Hola 👋 ¿Para cuál cuenta necesitas el token?\n{options}"
 
-    logging.info("whatsapp_webhook sending reply=%r to=%s", output, message.from_)
+    logging.info("whatsapp_webhook sending reply=%r to=%s",
+                 output, message.from_)
     if output:
         account_sid = os.environ.get(_TWILIO_ACCOUNT_SID_ENV)
         auth_token = os.environ.get(_TWILIO_AUTH_TOKEN_ENV)
@@ -103,7 +113,8 @@ async def whatsapp_webhook(request: Request) -> Response:
             return Response(status_code=200)
 
         http_client = AsyncTwilioHttpClient()
-        twilio_client = Client(account_sid, auth_token, http_client=http_client)
+        twilio_client = Client(account_sid, auth_token,
+                               http_client=http_client)
         await twilio_client.messages.create_async(
             body=output,
             from_=message.to,
