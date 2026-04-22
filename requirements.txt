@@ -13,46 +13,57 @@ aiohttp-retry==2.9.1
 aioresponses==0.7.8
 aiosignal==1.4.0
     # via aiohttp
+annotated-doc==0.0.4
+    # via fastapi
 annotated-types==0.7.0
     # via pydantic
+anyio==4.13.0
+    # via starlette
 attrs==26.1.0
     # via aiohttp
+azure-core==1.39.0
+    # via azure-storage-blob
 azure-functions==2.0.0
     # via wchatv0
-cachetools==5.5.2
-    # via google-auth
+azure-storage-blob==12.28.0
+    # via wchatv0
 certifi==2026.2.25
     # via requests
+cffi==2.0.0 ; platform_python_implementation != 'PyPy'
+    # via cryptography
 charset-normalizer==3.4.7
     # via requests
 colorama==0.4.6 ; sys_platform == 'win32'
     # via pytest
+cryptography==46.0.7
+    # via
+    #   azure-storage-blob
+    #   google-auth
+fastapi==0.136.0
+    # via wchatv0
 frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
+google-auth==2.49.2
+    # via wchatv0
 idna==3.11
     # via
+    #   anyio
     #   requests
     #   yarl
 iniconfig==2.3.0
     # via pytest
+isodate==0.7.2
+    # via azure-storage-blob
 markupsafe==3.0.3
     # via werkzeug
 multidict==6.7.1
     # via
     #   aiohttp
     #   yarl
-google-auth==2.38.0
-    # via wchatv0
 orjson==3.11.8
     # via wchatv0
-pyasn1==0.6.1
-    # via
-    #   pyasn1-modules
-    #   rsa
-pyasn1-modules==0.4.2
-    # via google-auth
 packaging==26.0
     # via
     #   aioresponses
@@ -63,8 +74,16 @@ propcache==0.4.1
     # via
     #   aiohttp
     #   yarl
+pyasn1==0.6.3
+    # via pyasn1-modules
+pyasn1-modules==0.4.2
+    # via google-auth
+pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+    # via cffi
 pydantic==2.12.5
-    # via wchatv0
+    # via
+    #   fastapi
+    #   wchatv0
 pydantic-core==2.41.5
     # via pydantic
 pygments==2.20.0
@@ -76,19 +95,25 @@ pytest==9.0.3
 pytest-asyncio==1.3.0
 requests==2.33.1
     # via
+    #   azure-core
     #   twilio
     #   wchatv0
-rsa==4.9
-    # via google-auth
+starlette==1.0.0
+    # via fastapi
 twilio==9.10.4
     # via wchatv0
 typing-extensions==4.15.0
     # via
+    #   azure-core
+    #   azure-storage-blob
+    #   fastapi
     #   pydantic
     #   pydantic-core
     #   typing-inspection
 typing-inspection==0.4.2
-    # via pydantic
+    # via
+    #   fastapi
+    #   pydantic
 urllib3==2.6.3
     # via requests
 werkzeug==3.1.8
