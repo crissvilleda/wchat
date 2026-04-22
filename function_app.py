@@ -95,23 +95,6 @@ async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="text/plain",
         )
 
-
-    ## Obtener cliente
-        ## Buscar por numero o buscar por id
-
-    ## Obtener cuentas del cliente
-        ## Enviar plantilla de whatsapp con opciones
-        
-    ## Obtener token del ultimo correo de la cuenta
-        ## Buscar en gmail
-        ## Obtener el token de la cuenta selecionada
-
-
-    ## Responde con el token al usuario
-
-
-    
-
     redirect_to = req.params.get("redirect_to")
     if not redirect_to or not redirect_to.strip():
         return func.HttpResponse(
@@ -184,31 +167,65 @@ async def redirect_msgs(req: func.HttpRequest) -> func.HttpResponse:
     auth_level=func.AuthLevel.FUNCTION,
 )
 async def whatsapp_webhook(req: func.HttpRequest) -> func.HttpResponse:
-    """Receive incoming Twilio WhatsApp webhook, parse it, and send a reply.
+    """Receive incoming Twilio WhatsApp webhook and reply with an account OTP.
 
-    Twilio POSTs ``application/x-www-form-urlencoded`` form data.  We parse it
-    into a ``MessageSchema`` and then use the Twilio async client to respond.
+    Flow:
+        1. Identificar al cliente por su número de WhatsApp (campo ``From``).
+        2. Buscar el servicio que solicita en el texto del mensaje.
+        3. Si se reconoce un servicio: obtener el último OTP de Gmail y responder.
+        4. Si no se reconoce: listar las opciones disponibles.
 
     Environment variables required:
-        TWILIO_ACCOUNT_SID  – Twilio account SID
-        TWILIO_AUTH_TOKEN   – Twilio auth token
+        TWILIO_ACCOUNT_SID       – Twilio account SID
+        TWILIO_AUTH_TOKEN        – Twilio auth token
+        GMAIL_CREDENTIALS_JSON   – JSON con credenciales OAuth de Gmail
+                                   (misma estructura que tokens.json; para prod)
     """
-    from twilio.rest import Client
     from twilio.http.async_http_client import AsyncTwilioHttpClient
+    from twilio.rest import Client
 
+    from gmail_utils import get_latest_otp
+
+    # Servicios disponibles: keyword → consulta de Gmail
+    SERVICES: dict[str, str] = {
+        "netflix": 'subject:Netflix "inicio de sesión"',
+    }
+
+    # 1. Parsear el mensaje entrante
     body = get_body_from_request(req)
     message = MessageSchema(**body)
 
+    # 2. Identificar al cliente por número de WhatsApp
+    client_number = message.from_
     logging.info(
-        "whatsapp_webhook wa_id=%s from=%s type=%s",
+        "whatsapp_webhook from=%s wa_id=%s type=%s body=%r",
+        client_number,
         message.wa_id,
-        message.from_,
         message.message_type,
+        message.body,
     )
 
-    # --- Build your reply here ---
-    # Replace this stub with whatever response logic you need.
-    output: str | None = "Test 123"  # set to the text you want to send back
+    # 3. Determinar qué cuenta solicita el cliente
+    user_text = (message.body or "").strip().lower()
+    matched_service: str | None = next(
+        (key for key in SERVICES if key in user_text), None
+    )
+
+    if matched_service:
+        # 4. Buscar en Gmail el token del último correo de la cuenta seleccionada
+        query = SERVICES[matched_service]
+        otp = await asyncio.to_thread(get_latest_otp, query)
+
+        # 5. Responder con el token al usuario
+        output: str | None = (
+            f"Tu token de {matched_service.capitalize()} es: *{otp}*"
+            if otp
+            else f"No encontré un token reciente para {matched_service.capitalize()} en el correo."
+        )
+    else:
+        # Enviar las opciones disponibles al cliente
+        options = "\n".join(f"• {name.capitalize()}" for name in SERVICES)
+        output = f"Hola 👋 ¿Para cuál cuenta necesitas el token?\n{options}"
 
     if output:
         account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
@@ -221,7 +238,7 @@ async def whatsapp_webhook(req: func.HttpRequest) -> func.HttpResponse:
             to=message.from_,
         )
 
-    # Twilio expects a 200 to acknowledge receipt of the webhook.
+    # Twilio espera 200 para confirmar recepción del webhook.
     return func.HttpResponse(status_code=200)
 
 
