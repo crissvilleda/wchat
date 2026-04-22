@@ -207,14 +207,19 @@ async def whatsapp_webhook(req: func.HttpRequest) -> func.HttpResponse:
 
     # 3. Determinar qué cuenta solicita el cliente
     user_text = (message.body or "").strip().lower()
+    logging.info("whatsapp_webhook user_text=%r services_available=%s", user_text, list(SERVICES))
+
     matched_service: str | None = next(
         (key for key in SERVICES if key in user_text), None
     )
+    logging.info("whatsapp_webhook matched_service=%r", matched_service)
 
     if matched_service:
         # 4. Buscar en Gmail el token del último correo de la cuenta seleccionada
         query = SERVICES[matched_service]
+        logging.info("whatsapp_webhook fetching OTP from Gmail query=%r", query)
         otp = await asyncio.to_thread(get_latest_otp, query)
+        logging.info("whatsapp_webhook otp=%r", otp)
 
         # 5. Responder con el token al usuario
         output: str | None = (
@@ -227,6 +232,7 @@ async def whatsapp_webhook(req: func.HttpRequest) -> func.HttpResponse:
         options = "\n".join(f"• {name.capitalize()}" for name in SERVICES)
         output = f"Hola 👋 ¿Para cuál cuenta necesitas el token?\n{options}"
 
+    logging.info("whatsapp_webhook sending reply=%r to=%s", output, message.from_)
     if output:
         account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
         auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
@@ -237,6 +243,7 @@ async def whatsapp_webhook(req: func.HttpRequest) -> func.HttpResponse:
             from_=message.to,
             to=message.from_,
         )
+        logging.info("whatsapp_webhook reply sent ok")
 
     # Twilio espera 200 para confirmar recepción del webhook.
     return func.HttpResponse(status_code=200)

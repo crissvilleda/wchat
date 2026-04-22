@@ -37,12 +37,18 @@ def _load_credentials() -> Credentials | None:
     """Load credentials from env var or local tokens file."""
     raw = os.environ.get(_ENV_CREDENTIALS)
     if raw:
+        logging.info("gmail_utils: loading credentials from env var %s", _ENV_CREDENTIALS)
         data = json.loads(raw)
     elif os.path.exists(_TOKENS_FILE):
+        logging.info("gmail_utils: loading credentials from file %s", _TOKENS_FILE)
         with open(_TOKENS_FILE) as f:
             data = json.load(f)
     else:
-        logging.warning("Gmail credentials not found (set %s or provide tokens.json)", _ENV_CREDENTIALS)
+        logging.warning(
+            "gmail_utils: no credentials found — set %s env var or provide %s",
+            _ENV_CREDENTIALS,
+            _TOKENS_FILE,
+        )
         return None
 
     return Credentials(
@@ -61,7 +67,13 @@ def get_valid_credentials() -> Credentials | None:
     if creds is None:
         return None
     if creds.expired and creds.refresh_token:
+        logging.info("gmail_utils: token expired, refreshing...")
         creds.refresh(GoogleRequest())
+        logging.info("gmail_utils: token refreshed ok")
+    elif creds.expired:
+        logging.warning("gmail_utils: token expired and no refresh_token available")
+        return None
+    logging.info("gmail_utils: credentials valid")
     return creds if creds.valid else None
 
 
@@ -100,12 +112,16 @@ def get_latest_otp(query: str) -> str | None:
     Returns ``None`` when credentials are unavailable, no messages match, or no
     numeric token can be extracted from the message body.
     """
+    logging.info("gmail_utils: get_latest_otp query=%r", query)
+
     creds = get_valid_credentials()
     if creds is None:
+        logging.error("gmail_utils: aborting — no valid credentials")
         return None
 
     headers = {"Authorization": f"Bearer {creds.token}"}
 
+    logging.info("gmail_utils: searching messages...")
     res = requests.get(
         f"{_GMAIL_API}/messages",
         params={"q": query},
@@ -114,10 +130,13 @@ def get_latest_otp(query: str) -> str | None:
     ).json()
 
     if "messages" not in res:
-        logging.info("gmail_utils: no messages found for query=%r", query)
+        logging.warning("gmail_utils: no messages found for query=%r", query)
         return None
 
+    total = res.get("resultSizeEstimate", "?")
     message_id = res["messages"][0]["id"]
+    logging.info("gmail_utils: found ~%s message(s), fetching latest id=%s", total, message_id)
+
     msg = requests.get(
         f"{_GMAIL_API}/messages/{message_id}",
         headers=headers,
@@ -125,7 +144,8 @@ def get_latest_otp(query: str) -> str | None:
     ).json()
 
     body = _extract_body(msg["payload"])
-    otp = _extract_otp(body)
+    logging.info("gmail_utils: body preview=%r", body[:120])
 
-    logging.info("gmail_utils: query=%r otp=%r", query, otp)
+    otp = _extract_otp(body)
+    logging.info("gmail_utils: extracted otp=%r", otp)
     return otp
