@@ -61,3 +61,14 @@ async def test_whatsapp_webhook_accepts_twilio_form_and_replies(monkeypatch):
     assert sent["from_"] == "whatsapp:+15550001111"
     assert "123456" in sent["body"]
 
+
+@pytest.mark.asyncio
+async def test_me_requires_session():
+    async with AsyncClient(
+        transport=ASGITransport(app=fastapi_app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get("/api/me")
+
+    assert resp.status_code == 401
+

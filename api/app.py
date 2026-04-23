@@ -1,9 +1,36 @@
+import os
+
 from fastapi import FastAPI
+from starlette.middleware.cors import CORSMiddleware
+from supertokens_python import get_all_cors_headers
+from supertokens_python.framework.fastapi import get_middleware
 
+from api.routers.me import router as me_router
 from api.routers.whatsapp import router as whatsapp_router
+from api.supertokens_init import init_supertokens
 
+
+init_supertokens()
 
 fastapi_app = FastAPI(title="wchatv0")
 
+fastapi_app.add_middleware(get_middleware())
+
 # Apply the `/api` prefix once here (don’t repeat it in every router).
 fastapi_app.include_router(whatsapp_router, prefix="/api")
+fastapi_app.include_router(me_router, prefix="/api")
+
+cors_origins = os.getenv("SUPERTOKENS_CORS_ORIGINS")
+if cors_origins:
+    allow_origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+else:
+    allow_origins = [
+        os.getenv("SUPERTOKENS_WEBSITE_DOMAIN", "http://localhost:3000")]
+
+fastapi_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type"] + get_all_cors_headers(),
+)

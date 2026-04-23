@@ -11,8 +11,10 @@ dependencies = [
     "fastapi>=0.136.0",
     "google-auth>=2.38",
     "orjson>=3.11.8",
+    "pip>=26.0.1",
     "pydantic>=2.12.5",
     "requests>=2.32",
+    "supertokens-python>=0.31.2",
     "twilio>=9.10.4",
 ]
 
