@@ -119,6 +119,10 @@ propcache==0.4.1
     # via
     #   aiohttp
     #   yarl
+psycopg==3.3.3
+    # via wchatv0
+psycopg-binary==3.3.3 ; implementation_name != 'pypy'
+    # via psycopg
 pyasn1==0.6.3
     # via pyasn1-modules
 pyasn1-modules==0.4.2
@@ -191,6 +195,8 @@ typing-inspection==0.4.2
     # via
     #   fastapi
     #   pydantic
+tzdata==2026.2 ; sys_platform == 'win32'
+    # via psycopg
 urllib3==2.6.3
     # via requests
 werkzeug==3.1.8
