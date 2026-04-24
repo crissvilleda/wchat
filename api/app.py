@@ -1,5 +1,9 @@
 import os
 
+from api.logging_setup import configure_logging
+
+configure_logging()
+
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from supertokens_python import get_all_cors_headers
