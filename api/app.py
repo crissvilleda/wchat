@@ -11,6 +11,7 @@ from api.routers.users import router as users_router
 from api.routers.customers import router as customers_router
 from api.routers.streaming_services import router as streaming_services_router
 from api.routers.streaming_accounts import router as streaming_accounts_router
+from api.auth import auth_router
 from api.supertokens_init import init_supertokens
 
 
@@ -23,6 +24,7 @@ fastapi_app.add_middleware(get_middleware())
 # Apply the `/api` prefix once here (don’t repeat it in every router).
 fastapi_app.include_router(whatsapp_router, prefix="/api")
 fastapi_app.include_router(me_router, prefix="/api")
+fastapi_app.include_router(auth_router, prefix="/api")
 fastapi_app.include_router(users_router, prefix="/api")
 fastapi_app.include_router(customers_router, prefix="/api")
 fastapi_app.include_router(streaming_services_router, prefix="/api")
