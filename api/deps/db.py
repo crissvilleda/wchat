@@ -1,17 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from api.db import get_async_sessionmaker
 
 
-async def get_db_session() -> AsyncIterator[AsyncSession]:
-    session_maker = get_async_sessionmaker()
-    async with session_maker() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
-
+def get_session_maker() -> async_sessionmaker[AsyncSession]:
+    return get_async_sessionmaker()

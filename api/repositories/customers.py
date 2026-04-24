@@ -30,9 +30,8 @@ class DbCustomerRepository:
         customer = Customer(entity_id=entity_id, name=name, whatsapp_e164=whatsapp_e164)
         self._db.add(customer)
         try:
-            await self._db.commit()
+            await self._db.flush()
         except IntegrityError as e:
-            await self._db.rollback()
             raise ConflictError("Customer already exists") from e
         await self._db.refresh(customer)
         return customer
@@ -67,9 +66,8 @@ class DbCustomerRepository:
         if whatsapp_e164 is not None:
             customer.whatsapp_e164 = whatsapp_e164
         try:
-            await self._db.commit()
+            await self._db.flush()
         except IntegrityError as e:
-            await self._db.rollback()
             raise ConflictError("Update conflict") from e
         await self._db.refresh(customer)
         return customer
@@ -77,5 +75,5 @@ class DbCustomerRepository:
     async def soft_delete(self, *, entity_id: int, customer_id: int) -> None:
         customer = await self.get(entity_id=entity_id, customer_id=customer_id)
         customer.deleted_at = datetime.now(tz=timezone.utc)
-        await self._db.commit()
+        await self._db.flush()
 

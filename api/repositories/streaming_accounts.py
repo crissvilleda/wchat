@@ -56,9 +56,8 @@ class DbStreamingAccountRepository:
         )
         self._db.add(acc)
         try:
-            await self._db.commit()
+            await self._db.flush()
         except IntegrityError as e:
-            await self._db.rollback()
             raise ConflictError("Streaming account already exists") from e
         await self._db.refresh(acc)
         return acc
@@ -102,9 +101,8 @@ class DbStreamingAccountRepository:
         if is_active is not None:
             acc.is_active = is_active
         try:
-            await self._db.commit()
+            await self._db.flush()
         except IntegrityError as e:
-            await self._db.rollback()
             raise ConflictError("Update conflict") from e
         await self._db.refresh(acc)
         return acc
@@ -112,5 +110,5 @@ class DbStreamingAccountRepository:
     async def soft_delete(self, *, entity_id: int, streaming_account_id: int) -> None:
         acc = await self.get(entity_id=entity_id, streaming_account_id=streaming_account_id)
         acc.deleted_at = datetime.now(tz=timezone.utc)
-        await self._db.commit()
+        await self._db.flush()
 

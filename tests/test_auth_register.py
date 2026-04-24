@@ -18,6 +18,36 @@ class _FakeOkSignupResult:
         self.user = _FakeStUser(user_id)
 
 
+class _FakeAsyncSessionCM:
+    async def __aenter__(self):
+        return object()
+
+    async def __aexit__(self, *_args):
+        return None
+
+
+class _FakeSessionMaker:
+    def __call__(self):
+        return _FakeAsyncSessionCM()
+
+
+def _fake_get_session_maker():
+    return _FakeSessionMaker()
+
+
+class _FakeTransactionCM:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, *_args):
+        return None
+
+
+class _FakeDbWithBegin:
+    def begin(self):
+        return _FakeTransactionCM()
+
+
 class _FakeUser:
     def __init__(
         self,
@@ -62,12 +92,9 @@ async def test_register_endpoint_idempotent_returns_200(monkeypatch):
 
     monkeypatch.setattr(auth_router, "register_user", _fake_register_user)
 
-    async def _fake_db_dep():
-        yield object()
+    from api.deps.db import get_session_maker
 
-    from api.deps.db import get_db_session
-
-    fastapi_app.dependency_overrides[get_db_session] = _fake_db_dep
+    fastapi_app.dependency_overrides[get_session_maker] = _fake_get_session_maker
 
     async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://test") as client:
         resp = await client.post(
@@ -75,7 +102,7 @@ async def test_register_endpoint_idempotent_returns_200(monkeypatch):
             json={"email": "a@example.com", "password": "password-password"},
         )
 
-    fastapi_app.dependency_overrides.pop(get_db_session, None)
+    fastapi_app.dependency_overrides.pop(get_session_maker, None)
 
     assert resp.status_code == 200
     assert resp.json()["supertokens_user_id"] == "st_1"
@@ -90,12 +117,9 @@ async def test_register_endpoint_conflict_returns_409(monkeypatch):
 
     monkeypatch.setattr(auth_router, "register_user", _fake_register_user)
 
-    async def _fake_db_dep():
-        yield object()
+    from api.deps.db import get_session_maker
 
-    from api.deps.db import get_db_session
-
-    fastapi_app.dependency_overrides[get_db_session] = _fake_db_dep
+    fastapi_app.dependency_overrides[get_session_maker] = _fake_get_session_maker
 
     async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://test") as client:
         resp = await client.post(
@@ -103,7 +127,7 @@ async def test_register_endpoint_conflict_returns_409(monkeypatch):
             json={"email": "a@example.com", "password": "password-password"},
         )
 
-    fastapi_app.dependency_overrides.pop(get_db_session, None)
+    fastapi_app.dependency_overrides.pop(get_session_maker, None)
 
     assert resp.status_code == 409
 
@@ -150,7 +174,7 @@ async def test_registration_email_exists_links_local_user(monkeypatch):
     monkeypatch.setattr(reg, "_create_local_user_for_supertokens_user", _fake_create_local)
 
     user, created_flag = await reg.register_user(
-        db=object(), email="a@example.com", password="password-password", name=None
+        db=_FakeDbWithBegin(), email="a@example.com", password="password-password", name=None
     )
 
     assert created_flag is True

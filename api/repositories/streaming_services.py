@@ -30,9 +30,8 @@ class DbStreamingServiceRepository:
         service = StreamingService(slug=slug, display_name=display_name, keyword_patterns=keyword_patterns)
         self._db.add(service)
         try:
-            await self._db.commit()
+            await self._db.flush()
         except IntegrityError as e:
-            await self._db.rollback()
             raise ConflictError("Streaming service already exists") from e
         await self._db.refresh(service)
         return service
@@ -63,9 +62,8 @@ class DbStreamingServiceRepository:
         # keyword_patterns is intentionally nullable; allow explicit None to clear.
         service.keyword_patterns = keyword_patterns
         try:
-            await self._db.commit()
+            await self._db.flush()
         except IntegrityError as e:
-            await self._db.rollback()
             raise ConflictError("Update conflict") from e
         await self._db.refresh(service)
         return service
@@ -73,5 +71,5 @@ class DbStreamingServiceRepository:
     async def soft_delete(self, *, service_id: int) -> None:
         service = await self.get(service_id=service_id)
         service.deleted_at = datetime.now(tz=timezone.utc)
-        await self._db.commit()
+        await self._db.flush()
 

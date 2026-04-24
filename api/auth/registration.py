@@ -106,12 +106,13 @@ async def register_user(
             )
             return existing, False
 
-        user = await _create_local_user_for_supertokens_user(
-            db=db,
-            supertokens_user_id=supertokens_user_id,
-            email=email,
-            display_name=display_name,
-        )
+        async with db.begin():
+            user = await _create_local_user_for_supertokens_user(
+                db=db,
+                supertokens_user_id=supertokens_user_id,
+                email=email,
+                display_name=display_name,
+            )
         logger.info(
             "auth_register_linked_local_user_created",
             extra={
@@ -135,12 +136,13 @@ async def register_user(
     supertokens_user_id_hash = _hash_id(supertokens_user_id)
 
     try:
-        user = await _create_local_user_for_supertokens_user(
-            db=db,
-            supertokens_user_id=supertokens_user_id,
-            email=email,
-            display_name=display_name,
-        )
+        async with db.begin():
+            user = await _create_local_user_for_supertokens_user(
+                db=db,
+                supertokens_user_id=supertokens_user_id,
+                email=email,
+                display_name=display_name,
+            )
     except Exception:
         logger.exception(
             "auth_register_local_persist_failed",

@@ -19,9 +19,8 @@ class DbEntityRepository:
         entity = Entity(name=name)
         self._db.add(entity)
         try:
-            await self._db.commit()
+            await self._db.flush()
         except IntegrityError as e:
-            await self._db.rollback()
             orig = getattr(e, "orig", None)
             pgcode = getattr(orig, "pgcode", None)
             constraint = getattr(getattr(orig, "diag", None), "constraint_name", None)

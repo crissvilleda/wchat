@@ -28,9 +28,8 @@ class DbUserRepository:
         user = User(entity_id=entity_id, name=name, email=email, supertokens_user_id=supertokens_user_id)
         self._db.add(user)
         try:
-            await self._db.commit()
+            await self._db.flush()
         except IntegrityError as e:
-            await self._db.rollback()
             raise ConflictError("User already exists") from e
         await self._db.refresh(user)
         return user
@@ -63,9 +62,8 @@ class DbUserRepository:
         if email is not None:
             user.email = email
         try:
-            await self._db.commit()
+            await self._db.flush()
         except IntegrityError as e:
-            await self._db.rollback()
             raise ConflictError("Update conflict") from e
         await self._db.refresh(user)
         return user
@@ -73,5 +71,5 @@ class DbUserRepository:
     async def soft_delete(self, *, entity_id: int, user_id: int) -> None:
         user = await self.get(entity_id=entity_id, user_id=user_id)
         user.deleted_at = datetime.now(tz=timezone.utc)
-        await self._db.commit()
+        await self._db.flush()
 

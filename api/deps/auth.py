@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fastapi import Depends, HTTPException, status
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from supertokens_python.recipe.session import SessionContainer
-from supertokens_python.recipe.session.framework.fastapi import verify_session
 
-from api.deps.db import get_db_session
 from api.repositories.errors import NotFoundError
 from orm_models.user import User
 
@@ -20,10 +18,7 @@ class TenantContext:
     supertokens_user_id: str
 
 
-async def get_tenant_context(
-    session_: SessionContainer = Depends(verify_session()),
-    db: AsyncSession = Depends(get_db_session),
-) -> TenantContext:
+async def resolve_tenant_context(db: AsyncSession, session_: SessionContainer) -> TenantContext:
     supertokens_user_id = session_.get_user_id()
 
     stmt = select(User).where(
@@ -41,12 +36,8 @@ async def get_tenant_context(
     )
 
 
-async def get_tenant_context_http(
-    session_: SessionContainer = Depends(verify_session()),
-    db: AsyncSession = Depends(get_db_session),
-) -> TenantContext:
+async def resolve_tenant_context_http(db: AsyncSession, session_: SessionContainer) -> TenantContext:
     try:
-        return await get_tenant_context(session_=session_, db=db)
+        return await resolve_tenant_context(db, session_)
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-

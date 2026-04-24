@@ -3,11 +3,11 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from api.auth.registration import register_user
 from api.auth.schemas import RegisterRequest
-from api.deps.db import get_db_session
+from api.deps.db import get_session_maker
 from api.repositories.errors import ConflictError
 from api.schemas.user import UserOut
 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 async def register(
     payload: RegisterRequest,
     response: Response,
-    db: AsyncSession = Depends(get_db_session),
+    session_maker: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
 ) -> UserOut:
     try:
         user, created = await register_user(
@@ -59,4 +59,3 @@ async def register(
         },
     )
     return UserOut.model_validate(user)
-
