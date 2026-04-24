@@ -31,7 +31,7 @@ class StreamingAccountRepository(Protocol):
     async def soft_delete(self, *, entity_id: int, streaming_account_id: int) -> None: ...
 
 
-class SqlAlchemyStreamingAccountRepository:
+class DbStreamingAccountRepository:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps.auth import TenantContext, get_tenant_context_http
 from api.deps.db import get_db_session
-from api.repositories.customers import SqlAlchemyCustomerRepository
+from api.repositories.customers import DbCustomerRepository
 from api.repositories.errors import ConflictError, NotFoundError
 from api.schemas.customer import CustomerCreate, CustomerOut, CustomerUpdate
 from api.services.customers_service import CustomersService
@@ -20,7 +20,7 @@ async def create_customer(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> CustomerOut:
-    service = CustomersService(SqlAlchemyCustomerRepository(db))
+    service = CustomersService(DbCustomerRepository(db))
     try:
         customer = await service.create(entity_id=ctx.entity_id, **payload.model_dump())
     except ConflictError as e:
@@ -34,7 +34,7 @@ async def get_customer(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> CustomerOut:
-    service = CustomersService(SqlAlchemyCustomerRepository(db))
+    service = CustomersService(DbCustomerRepository(db))
     try:
         customer = await service.get(entity_id=ctx.entity_id, customer_id=customer_id)
     except NotFoundError as e:
@@ -49,7 +49,7 @@ async def list_customers(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[CustomerOut]:
-    service = CustomersService(SqlAlchemyCustomerRepository(db))
+    service = CustomersService(DbCustomerRepository(db))
     customers = await service.list(entity_id=ctx.entity_id, limit=limit, offset=offset)
     return [CustomerOut.model_validate(c) for c in customers]
 
@@ -61,7 +61,7 @@ async def update_customer(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> CustomerOut:
-    service = CustomersService(SqlAlchemyCustomerRepository(db))
+    service = CustomersService(DbCustomerRepository(db))
     try:
         customer = await service.update(entity_id=ctx.entity_id, customer_id=customer_id, **payload.model_dump())
     except NotFoundError as e:
@@ -77,7 +77,7 @@ async def delete_customer(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> None:
-    service = CustomersService(SqlAlchemyCustomerRepository(db))
+    service = CustomersService(DbCustomerRepository(db))
     try:
         await service.soft_delete(entity_id=ctx.entity_id, customer_id=customer_id)
     except NotFoundError as e:

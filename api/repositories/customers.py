@@ -22,7 +22,7 @@ class CustomerRepository(Protocol):
     async def soft_delete(self, *, entity_id: int, customer_id: int) -> None: ...
 
 
-class SqlAlchemyCustomerRepository:
+class DbCustomerRepository:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 

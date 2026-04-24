@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps.auth import TenantContext, get_tenant_context_http
 from api.deps.db import get_db_session
 from api.repositories.errors import ConflictError, NotFoundError
-from api.repositories.users import SqlAlchemyUserRepository
+from api.repositories.users import DbUserRepository
 from api.schemas.user import UserCreate, UserOut, UserUpdate
 from api.services.users_service import UsersService
 
@@ -20,7 +20,7 @@ async def create_user(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> UserOut:
-    service = UsersService(SqlAlchemyUserRepository(db))
+    service = UsersService(DbUserRepository(db))
     try:
         user = await service.create(entity_id=ctx.entity_id, **payload.model_dump())
     except ConflictError as e:
@@ -34,7 +34,7 @@ async def get_user(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> UserOut:
-    service = UsersService(SqlAlchemyUserRepository(db))
+    service = UsersService(DbUserRepository(db))
     try:
         user = await service.get(entity_id=ctx.entity_id, user_id=user_id)
     except NotFoundError as e:
@@ -49,7 +49,7 @@ async def list_users(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[UserOut]:
-    service = UsersService(SqlAlchemyUserRepository(db))
+    service = UsersService(DbUserRepository(db))
     users = await service.list(entity_id=ctx.entity_id, limit=limit, offset=offset)
     return [UserOut.model_validate(u) for u in users]
 
@@ -61,7 +61,7 @@ async def update_user(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> UserOut:
-    service = UsersService(SqlAlchemyUserRepository(db))
+    service = UsersService(DbUserRepository(db))
     try:
         user = await service.update(entity_id=ctx.entity_id, user_id=user_id, **payload.model_dump())
     except NotFoundError as e:
@@ -77,7 +77,7 @@ async def delete_user(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> None:
-    service = UsersService(SqlAlchemyUserRepository(db))
+    service = UsersService(DbUserRepository(db))
     try:
         await service.soft_delete(entity_id=ctx.entity_id, user_id=user_id)
     except NotFoundError as e:

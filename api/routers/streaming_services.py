@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps.auth import TenantContext, get_tenant_context_http
 from api.deps.db import get_db_session
 from api.repositories.errors import ConflictError, NotFoundError
-from api.repositories.streaming_services import SqlAlchemyStreamingServiceRepository
+from api.repositories.streaming_services import DbStreamingServiceRepository
 from api.schemas.streaming_service import StreamingServiceCreate, StreamingServiceOut, StreamingServiceUpdate
 from api.services.streaming_services_service import StreamingServicesService
 
@@ -20,7 +20,7 @@ async def create_streaming_service(
     _: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> StreamingServiceOut:
-    service = StreamingServicesService(SqlAlchemyStreamingServiceRepository(db))
+    service = StreamingServicesService(DbStreamingServiceRepository(db))
     try:
         row = await service.create(**payload.model_dump())
     except ConflictError as e:
@@ -34,7 +34,7 @@ async def get_streaming_service(
     _: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> StreamingServiceOut:
-    service = StreamingServicesService(SqlAlchemyStreamingServiceRepository(db))
+    service = StreamingServicesService(DbStreamingServiceRepository(db))
     try:
         row = await service.get(service_id=service_id)
     except NotFoundError as e:
@@ -49,7 +49,7 @@ async def list_streaming_services(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[StreamingServiceOut]:
-    service = StreamingServicesService(SqlAlchemyStreamingServiceRepository(db))
+    service = StreamingServicesService(DbStreamingServiceRepository(db))
     rows = await service.list(limit=limit, offset=offset)
     return [StreamingServiceOut.model_validate(r) for r in rows]
 
@@ -61,7 +61,7 @@ async def update_streaming_service(
     _: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> StreamingServiceOut:
-    service = StreamingServicesService(SqlAlchemyStreamingServiceRepository(db))
+    service = StreamingServicesService(DbStreamingServiceRepository(db))
     try:
         row = await service.update(service_id=service_id, **payload.model_dump())
     except NotFoundError as e:
@@ -77,7 +77,7 @@ async def delete_streaming_service(
     _: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> None:
-    service = StreamingServicesService(SqlAlchemyStreamingServiceRepository(db))
+    service = StreamingServicesService(DbStreamingServiceRepository(db))
     try:
         await service.soft_delete(service_id=service_id)
     except NotFoundError as e:

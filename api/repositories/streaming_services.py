@@ -22,7 +22,7 @@ class StreamingServiceRepository(Protocol):
     async def soft_delete(self, *, service_id: int) -> None: ...
 
 
-class SqlAlchemyStreamingServiceRepository:
+class DbStreamingServiceRepository:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 

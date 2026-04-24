@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps.auth import TenantContext, get_tenant_context_http
 from api.deps.db import get_db_session
 from api.repositories.errors import ConflictError, NotFoundError
-from api.repositories.streaming_accounts import SqlAlchemyStreamingAccountRepository
+from api.repositories.streaming_accounts import DbStreamingAccountRepository
 from api.schemas.streaming_account import StreamingAccountCreate, StreamingAccountOut, StreamingAccountUpdate
 from api.services.streaming_accounts_service import StreamingAccountsService
 
@@ -20,7 +20,7 @@ async def create_streaming_account(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> StreamingAccountOut:
-    service = StreamingAccountsService(SqlAlchemyStreamingAccountRepository(db))
+    service = StreamingAccountsService(DbStreamingAccountRepository(db))
     try:
         row = await service.create(entity_id=ctx.entity_id, **payload.model_dump())
     except NotFoundError as e:
@@ -36,7 +36,7 @@ async def get_streaming_account(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> StreamingAccountOut:
-    service = StreamingAccountsService(SqlAlchemyStreamingAccountRepository(db))
+    service = StreamingAccountsService(DbStreamingAccountRepository(db))
     try:
         row = await service.get(entity_id=ctx.entity_id, streaming_account_id=streaming_account_id)
     except NotFoundError as e:
@@ -51,7 +51,7 @@ async def list_streaming_accounts(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[StreamingAccountOut]:
-    service = StreamingAccountsService(SqlAlchemyStreamingAccountRepository(db))
+    service = StreamingAccountsService(DbStreamingAccountRepository(db))
     rows = await service.list(entity_id=ctx.entity_id, limit=limit, offset=offset)
     return [StreamingAccountOut.model_validate(r) for r in rows]
 
@@ -63,7 +63,7 @@ async def update_streaming_account(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> StreamingAccountOut:
-    service = StreamingAccountsService(SqlAlchemyStreamingAccountRepository(db))
+    service = StreamingAccountsService(DbStreamingAccountRepository(db))
     try:
         row = await service.update(
             entity_id=ctx.entity_id,
@@ -83,7 +83,7 @@ async def delete_streaming_account(
     ctx: TenantContext = Depends(get_tenant_context_http),
     db: AsyncSession = Depends(get_db_session),
 ) -> None:
-    service = StreamingAccountsService(SqlAlchemyStreamingAccountRepository(db))
+    service = StreamingAccountsService(DbStreamingAccountRepository(db))
     try:
         await service.soft_delete(entity_id=ctx.entity_id, streaming_account_id=streaming_account_id)
     except NotFoundError as e:
