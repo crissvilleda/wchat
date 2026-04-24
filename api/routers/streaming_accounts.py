@@ -1,0 +1,91 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.deps.auth import TenantContext, get_tenant_context_http
+from api.deps.db import get_db_session
+from api.repositories.errors import ConflictError, NotFoundError
+from api.repositories.streaming_accounts import SqlAlchemyStreamingAccountRepository
+from api.schemas.streaming_account import StreamingAccountCreate, StreamingAccountOut, StreamingAccountUpdate
+from api.services.streaming_accounts_service import StreamingAccountsService
+
+
+router = APIRouter(prefix="/streaming-accounts", tags=["streaming-accounts"])
+
+
+@router.post("", response_model=StreamingAccountOut, status_code=status.HTTP_201_CREATED)
+async def create_streaming_account(
+    payload: StreamingAccountCreate,
+    ctx: TenantContext = Depends(get_tenant_context_http),
+    db: AsyncSession = Depends(get_db_session),
+) -> StreamingAccountOut:
+    service = StreamingAccountsService(SqlAlchemyStreamingAccountRepository(db))
+    try:
+        row = await service.create(entity_id=ctx.entity_id, **payload.model_dump())
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    return StreamingAccountOut.model_validate(row)
+
+
+@router.get("/{streaming_account_id}", response_model=StreamingAccountOut)
+async def get_streaming_account(
+    streaming_account_id: int,
+    ctx: TenantContext = Depends(get_tenant_context_http),
+    db: AsyncSession = Depends(get_db_session),
+) -> StreamingAccountOut:
+    service = StreamingAccountsService(SqlAlchemyStreamingAccountRepository(db))
+    try:
+        row = await service.get(entity_id=ctx.entity_id, streaming_account_id=streaming_account_id)
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    return StreamingAccountOut.model_validate(row)
+
+
+@router.get("", response_model=list[StreamingAccountOut])
+async def list_streaming_accounts(
+    ctx: TenantContext = Depends(get_tenant_context_http),
+    db: AsyncSession = Depends(get_db_session),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> list[StreamingAccountOut]:
+    service = StreamingAccountsService(SqlAlchemyStreamingAccountRepository(db))
+    rows = await service.list(entity_id=ctx.entity_id, limit=limit, offset=offset)
+    return [StreamingAccountOut.model_validate(r) for r in rows]
+
+
+@router.patch("/{streaming_account_id}", response_model=StreamingAccountOut)
+async def update_streaming_account(
+    streaming_account_id: int,
+    payload: StreamingAccountUpdate,
+    ctx: TenantContext = Depends(get_tenant_context_http),
+    db: AsyncSession = Depends(get_db_session),
+) -> StreamingAccountOut:
+    service = StreamingAccountsService(SqlAlchemyStreamingAccountRepository(db))
+    try:
+        row = await service.update(
+            entity_id=ctx.entity_id,
+            streaming_account_id=streaming_account_id,
+            **payload.model_dump(),
+        )
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    return StreamingAccountOut.model_validate(row)
+
+
+@router.delete("/{streaming_account_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_streaming_account(
+    streaming_account_id: int,
+    ctx: TenantContext = Depends(get_tenant_context_http),
+    db: AsyncSession = Depends(get_db_session),
+) -> None:
+    service = StreamingAccountsService(SqlAlchemyStreamingAccountRepository(db))
+    try:
+        await service.soft_delete(entity_id=ctx.entity_id, streaming_account_id=streaming_account_id)
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+

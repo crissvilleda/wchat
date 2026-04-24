@@ -7,6 +7,10 @@ from supertokens_python.framework.fastapi import get_middleware
 
 from api.routers.me import router as me_router
 from api.routers.whatsapp import router as whatsapp_router
+from api.routers.users import router as users_router
+from api.routers.customers import router as customers_router
+from api.routers.streaming_services import router as streaming_services_router
+from api.routers.streaming_accounts import router as streaming_accounts_router
 from api.supertokens_init import init_supertokens
 
 
@@ -19,6 +23,10 @@ fastapi_app.add_middleware(get_middleware())
 # Apply the `/api` prefix once here (don’t repeat it in every router).
 fastapi_app.include_router(whatsapp_router, prefix="/api")
 fastapi_app.include_router(me_router, prefix="/api")
+fastapi_app.include_router(users_router, prefix="/api")
+fastapi_app.include_router(customers_router, prefix="/api")
+fastapi_app.include_router(streaming_services_router, prefix="/api")
+fastapi_app.include_router(streaming_accounts_router, prefix="/api")
 
 cors_origins = os.getenv("SUPERTOKENS_CORS_ORIGINS")
 if cors_origins:
