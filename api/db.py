@@ -15,7 +15,13 @@ def _get_db_url_async() -> str:
 
 @lru_cache
 def get_async_engine() -> AsyncEngine:
-    return create_async_engine(_get_db_url_async(), pool_pre_ping=True)
+    return create_async_engine(
+        _get_db_url_async(),
+        pool_pre_ping=True,
+        connect_args={
+            "server_settings": {"search_path": "private,public"},
+        },
+    )
 
 
 @lru_cache

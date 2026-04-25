@@ -11,7 +11,7 @@ def init_supertokens() -> None:
     if _INITIALIZED:
         return
 
-    app_name = os.getenv("SUPERTOKENS_APP_NAME", "wchatv0")
+    app_name = os.getenv("SUPERTOKENS_APP_NAME", "wchat")
 
     api_domain = os.getenv("SUPERTOKENS_API_DOMAIN", "http://localhost:8000")
     website_domain = os.getenv("SUPERTOKENS_WEBSITE_DOMAIN", "http://localhost:3000")

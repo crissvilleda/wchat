@@ -1,8 +1,7 @@
 import os
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import create_engine, pool
 
 from alembic import context
 from orm_models import BaseModel
@@ -54,6 +53,12 @@ def _get_database_url() -> str:
     return config.get_main_option("sqlalchemy.url")
 
 
+def _pg_search_path_connect_args(url: str) -> dict[str, str] | None:
+    if url.startswith("postgresql"):
+        return {"options": "-c search_path=private,public"}
+    return None
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -85,10 +90,13 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    configuration = config.get_section(config.config_ini_section, {}) or {}
-    configuration["sqlalchemy.url"] = _get_database_url()
-
-    connectable = engine_from_config(configuration, prefix="sqlalchemy.", poolclass=pool.NullPool)
+    url = _get_database_url()
+    connect_args = _pg_search_path_connect_args(url)
+    connectable = create_engine(
+        url,
+        poolclass=pool.NullPool,
+        **({"connect_args": connect_args} if connect_args else {}),
+    )
 
     with connectable.connect() as connection:
         context.configure(
