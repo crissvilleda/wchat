@@ -4,7 +4,9 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
+
+from api.repositories.search import ilike_or_columns, keyset_paginate_result
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +20,9 @@ class StreamingAccountRepository(Protocol):
         self, *, entity_id: int, streaming_service_id: int, label: str, is_active: bool
     ) -> StreamingAccount: ...
     async def get(self, *, entity_id: int, streaming_account_id: int) -> StreamingAccount: ...
-    async def list(self, *, entity_id: int, limit: int, offset: int) -> Sequence[StreamingAccount]: ...
+    async def list(
+        self, *, entity_id: int, limit: int, after_id: int | None, q: str | None
+    ) -> tuple[Sequence[StreamingAccount], int | None]: ...
     async def update(
         self,
         *,
@@ -73,15 +77,35 @@ class DbStreamingAccountRepository:
             raise NotFoundError("Streaming account not found")
         return acc
 
-    async def list(self, *, entity_id: int, limit: int, offset: int) -> Sequence[StreamingAccount]:
-        stmt = (
-            select(StreamingAccount)
-            .where(StreamingAccount.entity_id == entity_id, StreamingAccount.deleted_at.is_(None))
-            .order_by(StreamingAccount.id.asc())
-            .limit(limit)
-            .offset(offset)
+    async def list(
+        self, *, entity_id: int, limit: int, after_id: int | None, q: str | None
+    ) -> tuple[Sequence[StreamingAccount], int | None]:
+        stmt = select(StreamingAccount).where(
+            StreamingAccount.entity_id == entity_id, StreamingAccount.deleted_at.is_(None)
         )
-        return (await self._db.execute(stmt)).scalars().all()
+        if after_id is not None:
+            stmt = stmt.where(StreamingAccount.id > after_id)
+        if q is not None:
+            stmt = (
+                stmt.join(
+                    StreamingService,
+                    and_(
+                        StreamingAccount.streaming_service_id == StreamingService.id,
+                        StreamingService.deleted_at.is_(None),
+                    ),
+                ).where(
+                    ilike_or_columns(
+                        StreamingAccount.label,
+                        StreamingService.slug,
+                        StreamingService.display_name,
+                        term=q,
+                    )
+                )
+            )
+        stmt = stmt.order_by(StreamingAccount.id.asc()).limit(limit + 1)
+        rows = (await self._db.execute(stmt)).scalars().all()
+        page, next_id = keyset_paginate_result(rows, limit=limit, id_getter="id")
+        return page, next_id
 
     async def update(
         self,

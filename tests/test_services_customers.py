@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from api.pagination.cursor import encode_id_cursor
 from api.repositories.errors import ConflictError, NotFoundError
 from api.services.customers_service import CustomersService
 from tests.conftest import CallRecorder
@@ -18,8 +19,11 @@ class _FakeCustomerRepo(CallRecorder):
         self.maybe_raise("get")
         return self.value("get")
 
-    async def list(self, *, entity_id: int, limit: int, offset: int):
-        self.record("list", {"entity_id": entity_id, "limit": limit, "offset": offset})
+    async def list(self, *, entity_id: int, limit: int, after_id: int | None, q: str | None):
+        self.record(
+            "list",
+            {"entity_id": entity_id, "limit": limit, "after_id": after_id, "q": q},
+        )
         self.maybe_raise("list")
         return self.value("list")
 
@@ -85,15 +89,18 @@ async def test_customers_service_get_propagates_not_found():
 
 
 @pytest.mark.asyncio
-async def test_customers_service_list_forwards_args_and_returns_value():
+async def test_customers_service_list_forwards_args_and_encodes_next_cursor():
     rows = [object()]
-    repo = _FakeCustomerRepo(return_values={"list": rows})
+    repo = _FakeCustomerRepo(return_values={"list": (rows, 3)})
     service = CustomersService(repo)
 
-    out = await service.list(entity_id=7, limit=10, offset=0)
+    out_items, out_cursor = await service.list(
+        entity_id=7, limit=10, after_id=None, q=None
+    )
 
-    assert out is rows
-    assert repo.calls == [("list", {"entity_id": 7, "limit": 10, "offset": 0})]
+    assert out_items is rows
+    assert out_cursor == encode_id_cursor(3)
+    assert repo.calls == [("list", {"entity_id": 7, "limit": 10, "after_id": None, "q": None})]
 
 
 @pytest.mark.asyncio

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from api.pagination.cursor import encode_id_cursor
 from api.repositories.customers import CustomerRepository
 from orm_models.customer import Customer
 
@@ -16,8 +17,15 @@ class CustomersService:
     async def get(self, *, entity_id: int, customer_id: int) -> Customer:
         return await self._repo.get(entity_id=entity_id, customer_id=customer_id)
 
-    async def list(self, *, entity_id: int, limit: int, offset: int) -> Sequence[Customer]:
-        return await self._repo.list(entity_id=entity_id, limit=limit, offset=offset)
+    async def list(
+        self, *, entity_id: int, limit: int, after_id: int | None, q: str | None
+    ) -> tuple[Sequence[Customer], str | None]:
+        rows, next_id = await self._repo.list(
+            entity_id=entity_id, limit=limit, after_id=after_id, q=q
+        )
+        if next_id is not None:
+            return rows, encode_id_cursor(next_id)
+        return rows, None
 
     async def update(
         self, *, entity_id: int, customer_id: int, name: str | None, whatsapp_e164: str | None

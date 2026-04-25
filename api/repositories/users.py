@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import Protocol
 
 from sqlalchemy import select
+
+from api.repositories.search import ilike_or_columns, keyset_paginate_result
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +17,9 @@ from orm_models.user import User
 class UserRepository(Protocol):
     async def create(self, *, entity_id: int, name: str, email: str, supertokens_user_id: str) -> User: ...
     async def get(self, *, entity_id: int, user_id: int) -> User: ...
-    async def list(self, *, entity_id: int, limit: int, offset: int) -> Sequence[User]: ...
+    async def list(
+        self, *, entity_id: int, limit: int, after_id: int | None, q: str | None
+    ) -> tuple[Sequence[User], int | None]: ...
     async def update(self, *, entity_id: int, user_id: int, name: str | None, email: str | None) -> User: ...
     async def soft_delete(self, *, entity_id: int, user_id: int) -> None: ...
 
@@ -45,15 +49,18 @@ class DbUserRepository:
             raise NotFoundError("User not found")
         return user
 
-    async def list(self, *, entity_id: int, limit: int, offset: int) -> Sequence[User]:
-        stmt = (
-            select(User)
-            .where(User.entity_id == entity_id, User.deleted_at.is_(None))
-            .order_by(User.id.asc())
-            .limit(limit)
-            .offset(offset)
-        )
-        return (await self._db.execute(stmt)).scalars().all()
+    async def list(
+        self, *, entity_id: int, limit: int, after_id: int | None, q: str | None
+    ) -> tuple[Sequence[User], int | None]:
+        stmt = select(User).where(User.entity_id == entity_id, User.deleted_at.is_(None))
+        if after_id is not None:
+            stmt = stmt.where(User.id > after_id)
+        if q is not None:
+            stmt = stmt.where(ilike_or_columns(User.name, User.email, term=q))
+        stmt = stmt.order_by(User.id.asc()).limit(limit + 1)
+        rows = (await self._db.execute(stmt)).scalars().all()
+        page, next_id = keyset_paginate_result(rows, limit=limit, id_getter="id")
+        return page, next_id
 
     async def update(self, *, entity_id: int, user_id: int, name: str | None, email: str | None) -> User:
         user = await self.get(entity_id=entity_id, user_id=user_id)

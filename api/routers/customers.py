@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from supertokens_python.recipe.session import SessionContainer
 from supertokens_python.recipe.session.framework.fastapi import verify_session
 
 from api.deps.auth import resolve_tenant_context_http
 from api.deps.db import get_session_maker
+from api.deps.pagination import ListContext, get_list_context
+from api.schemas.pagination import CursorPage
 from api.repositories.customers import DbCustomerRepository
 from api.repositories.errors import ConflictError, NotFoundError
 from api.schemas.customer import CustomerCreate, CustomerOut, CustomerUpdate
@@ -49,18 +51,25 @@ async def get_customer(
     return CustomerOut.model_validate(customer)
 
 
-@router.get("", response_model=list[CustomerOut])
+@router.get("", response_model=CursorPage[CustomerOut])
 async def list_customers(
+    list_ctx: ListContext = Depends(get_list_context),
     st_session: SessionContainer = Depends(verify_session()),
     session_maker: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-) -> list[CustomerOut]:
+) -> CursorPage[CustomerOut]:
     async with session_maker() as db:
         ctx = await resolve_tenant_context_http(db, st_session)
         service = CustomersService(DbCustomerRepository(db))
-        customers = await service.list(entity_id=ctx.entity_id, limit=limit, offset=offset)
-    return [CustomerOut.model_validate(c) for c in customers]
+        customers, next_cursor = await service.list(
+            entity_id=ctx.entity_id,
+            limit=list_ctx.limit,
+            after_id=list_ctx.after_id,
+            q=list_ctx.q,
+        )
+    return CursorPage(
+        items=[CustomerOut.model_validate(c) for c in customers],
+        next_cursor=next_cursor,
+    )
 
 
 @router.patch("/{customer_id}", response_model=CustomerOut)

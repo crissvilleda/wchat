@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from api.pagination.cursor import encode_id_cursor
 from api.repositories.errors import ConflictError, NotFoundError
 from api.services.users_service import UsersService
 from tests.conftest import CallRecorder
@@ -26,8 +27,11 @@ class _FakeUserRepo(CallRecorder):
         self.maybe_raise("get")
         return self.value("get")
 
-    async def list(self, *, entity_id: int, limit: int, offset: int):
-        self.record("list", {"entity_id": entity_id, "limit": limit, "offset": offset})
+    async def list(self, *, entity_id: int, limit: int, after_id: int | None, q: str | None):
+        self.record(
+            "list",
+            {"entity_id": entity_id, "limit": limit, "after_id": after_id, "q": q},
+        )
         self.maybe_raise("list")
         return self.value("list")
 
@@ -91,15 +95,34 @@ async def test_users_service_get_propagates_not_found():
 
 
 @pytest.mark.asyncio
-async def test_users_service_list_forwards_args_and_returns_value():
+async def test_users_service_list_forwards_args_and_encodes_next_cursor():
     rows = [object(), object()]
-    repo = _FakeUserRepo(return_values={"list": rows})
+    repo = _FakeUserRepo(return_values={"list": (rows, 7)})
     service = UsersService(repo)
 
-    out = await service.list(entity_id=2, limit=50, offset=100)
+    out_items, out_cursor = await service.list(
+        entity_id=2, limit=50, after_id=1, q="jane"
+    )
 
-    assert out is rows
-    assert repo.calls == [("list", {"entity_id": 2, "limit": 50, "offset": 100})]
+    assert out_items is rows
+    assert out_cursor == encode_id_cursor(7)
+    assert repo.calls == [
+        ("list", {"entity_id": 2, "limit": 50, "after_id": 1, "q": "jane"})
+    ]
+
+
+@pytest.mark.asyncio
+async def test_users_service_list_without_next_page():
+    rows = [object()]
+    repo = _FakeUserRepo(return_values={"list": (rows, None)})
+    service = UsersService(repo)
+
+    out_items, out_cursor = await service.list(
+        entity_id=2, limit=50, after_id=None, q=None
+    )
+
+    assert out_items is rows
+    assert out_cursor is None
 
 
 @pytest.mark.asyncio

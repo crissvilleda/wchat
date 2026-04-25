@@ -24,12 +24,13 @@ async def register(
     session_maker: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
 ) -> UserOut:
     try:
-        user, created = await register_user(
-            db=db,
-            email=str(payload.email),
-            password=payload.password,
-            name=payload.name,
-        )
+        async with session_maker() as db:
+            user, created = await register_user(
+                db=db,
+                email=str(payload.email),
+                password=payload.password,
+                name=payload.name,
+            )
     except ConflictError as e:
         logger.info(
             "auth_register_conflict",

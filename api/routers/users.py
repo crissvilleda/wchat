@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from supertokens_python.recipe.session import SessionContainer
 from supertokens_python.recipe.session.framework.fastapi import verify_session
 
 from api.deps.auth import resolve_tenant_context_http
 from api.deps.db import get_session_maker
+from api.deps.pagination import ListContext, get_list_context
+from api.schemas.pagination import CursorPage
 from api.repositories.errors import ConflictError, NotFoundError
 from api.repositories.users import DbUserRepository
 from api.schemas.user import UserCreate, UserOut, UserUpdate
@@ -49,18 +51,25 @@ async def get_user(
     return UserOut.model_validate(user)
 
 
-@router.get("", response_model=list[UserOut])
+@router.get("", response_model=CursorPage[UserOut])
 async def list_users(
+    list_ctx: ListContext = Depends(get_list_context),
     st_session: SessionContainer = Depends(verify_session()),
     session_maker: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-) -> list[UserOut]:
+) -> CursorPage[UserOut]:
     async with session_maker() as db:
         ctx = await resolve_tenant_context_http(db, st_session)
         service = UsersService(DbUserRepository(db))
-        users = await service.list(entity_id=ctx.entity_id, limit=limit, offset=offset)
-    return [UserOut.model_validate(u) for u in users]
+        users, next_cursor = await service.list(
+            entity_id=ctx.entity_id,
+            limit=list_ctx.limit,
+            after_id=list_ctx.after_id,
+            q=list_ctx.q,
+        )
+    return CursorPage(
+        items=[UserOut.model_validate(u) for u in users],
+        next_cursor=next_cursor,
+    )
 
 
 @router.patch("/{user_id}", response_model=UserOut)

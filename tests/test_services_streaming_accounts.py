@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from api.pagination.cursor import encode_id_cursor
 from api.repositories.errors import ConflictError, NotFoundError
 from api.services.streaming_accounts_service import StreamingAccountsService
 from tests.conftest import CallRecorder
@@ -26,8 +27,11 @@ class _FakeStreamingAccountRepo(CallRecorder):
         self.maybe_raise("get")
         return self.value("get")
 
-    async def list(self, *, entity_id: int, limit: int, offset: int):
-        self.record("list", {"entity_id": entity_id, "limit": limit, "offset": offset})
+    async def list(self, *, entity_id: int, limit: int, after_id: int | None, q: str | None):
+        self.record(
+            "list",
+            {"entity_id": entity_id, "limit": limit, "after_id": after_id, "q": q},
+        )
         self.maybe_raise("list")
         return self.value("list")
 
@@ -106,15 +110,18 @@ async def test_streaming_accounts_service_get_propagates_not_found():
 
 
 @pytest.mark.asyncio
-async def test_streaming_accounts_service_list_forwards_args_and_returns_value():
+async def test_streaming_accounts_service_list_forwards_args_and_encodes_next_cursor():
     rows = [object()]
-    repo = _FakeStreamingAccountRepo(return_values={"list": rows})
+    repo = _FakeStreamingAccountRepo(return_values={"list": (rows, 12)})
     service = StreamingAccountsService(repo)
 
-    out = await service.list(entity_id=1, limit=50, offset=0)
+    out_items, out_cursor = await service.list(
+        entity_id=1, limit=50, after_id=None, q="hbo"
+    )
 
-    assert out is rows
-    assert repo.calls == [("list", {"entity_id": 1, "limit": 50, "offset": 0})]
+    assert out_items is rows
+    assert out_cursor == encode_id_cursor(12)
+    assert repo.calls == [("list", {"entity_id": 1, "limit": 50, "after_id": None, "q": "hbo"})]
 
 
 @pytest.mark.asyncio
