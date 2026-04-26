@@ -19,6 +19,7 @@ class StreamingService(AuditedSoftDeleteModel):
     # Example: ["netflix", "nf", "net flix"]
     keyword_patterns: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
-    entitlements: Mapped[list["CustomerStreamingEntitlement"]] = relationship(back_populates="streaming_service")
-    streaming_accounts: Mapped[list["StreamingAccount"]] = relationship(back_populates="streaming_service")
+    entitlements: Mapped[list["CustomerStreamingEntitlement"]] = relationship(
+        back_populates="streaming_service",
+    )
 

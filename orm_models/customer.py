@@ -17,6 +17,10 @@ class Customer(EntityIsolationModel, AuditedSoftDeleteModel):
     whatsapp_e164: Mapped[str] = mapped_column(String(32), nullable=False)
 
     entity: Mapped["Entity"] = relationship(back_populates="customers")
+    customer_mailbox_links: Mapped[list["CustomerMailbox"]] = relationship(
+        back_populates="customer",
+        cascade="all, delete-orphan",
+    )
     entitlements: Mapped[list["CustomerStreamingEntitlement"]] = relationship(
         back_populates="customer",
         cascade="all, delete-orphan",

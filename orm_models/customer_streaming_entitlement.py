@@ -28,10 +28,17 @@ class CustomerStreamingEntitlement(AuditedSoftDeleteModel):
         nullable=False,
         index=True,
     )
+    mailbox_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("mailbox.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
 
     # Keep as string for flexibility (active/suspended/etc.).
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
 
     customer: Mapped["Customer"] = relationship(back_populates="entitlements")
     streaming_service: Mapped["StreamingService"] = relationship(back_populates="entitlements")
+    mailbox: Mapped["Mailbox | None"] = relationship(back_populates="entitlements")
 

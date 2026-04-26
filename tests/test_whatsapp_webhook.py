@@ -1,6 +1,10 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+import orm_models  # noqa: F401 — register models for metadata
+import api.db as api_db
+from orm_models.base import BaseModel
+
 from api import fastapi_app
 
 
@@ -23,6 +27,14 @@ class _FakeAsyncTwilioHttpClient:
 
 @pytest.mark.asyncio
 async def test_whatsapp_webhook_accepts_twilio_form_and_replies(monkeypatch):
+    # In-memory DB so the webhook can open a session for catalog lookup.
+    monkeypatch.setenv("DB_URL_ASYNC", "sqlite+aiosqlite:///:memory:")
+    api_db.get_async_engine.cache_clear()
+    api_db.get_async_sessionmaker.cache_clear()
+    engine = api_db.get_async_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(BaseModel.metadata.create_all)
+
     # Ensure deterministic OTP and avoid real Twilio network calls.
     monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC123")
     monkeypatch.setenv("TWILIO_AUTH_TOKEN", "token")

@@ -15,12 +15,15 @@ def _get_db_url_async() -> str:
 
 @lru_cache
 def get_async_engine() -> AsyncEngine:
+    url = _get_db_url_async()
+    if url.startswith("postgresql"):
+        connect_args: dict = {"server_settings": {"search_path": "private,public"}}
+    else:
+        connect_args = {}
     return create_async_engine(
-        _get_db_url_async(),
+        url,
         pool_pre_ping=True,
-        connect_args={
-            "server_settings": {"search_path": "private,public"},
-        },
+        connect_args=connect_args,
     )
 
 

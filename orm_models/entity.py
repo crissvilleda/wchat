@@ -13,5 +13,5 @@ class Entity(AuditedSoftDeleteModel):
 
     users: Mapped[list["User"]] = relationship(back_populates="entity")
     customers: Mapped[list["Customer"]] = relationship(back_populates="entity")
-    streaming_accounts: Mapped[list["StreamingAccount"]] = relationship(back_populates="entity")
+    mailboxes: Mapped[list["Mailbox"]] = relationship(back_populates="entity")
 

@@ -84,6 +84,35 @@ def get_valid_credentials() -> Credentials | None:
     creds = _load_credentials()
     if creds is None:
         return None
+    return _ensure_valid(creds)
+
+
+def _credentials_from_payload(payload: dict) -> Credentials | None:
+    """
+    Build credentials from a JSON object (e.g. mailbox.credential_payload).
+    Accepts the same key names as environment variables, or `token`/`refresh_token`/etc.
+    """
+    if not payload:
+        return None
+    token = payload.get(_ENV_TOKEN) or payload.get("token")
+    refresh_token = payload.get(_ENV_REFRESH_TOKEN) or payload.get("refresh_token")
+    token_uri = payload.get(_ENV_TOKEN_URI) or payload.get("token_uri")
+    client_id = payload.get(_ENV_CLIENT_ID) or payload.get("client_id")
+    client_secret = payload.get(_ENV_CLIENT_SECRET) or payload.get("client_secret")
+    if not all([token, refresh_token, token_uri, client_id, client_secret]):
+        logging.warning("gmail_utils: credential payload is incomplete")
+        return None
+    return Credentials(
+        token=token,
+        refresh_token=refresh_token,
+        token_uri=token_uri,
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=SCOPES,
+    )
+
+
+def _ensure_valid(creds: Credentials) -> Credentials | None:
     if creds.expired and creds.refresh_token:
         logging.info("gmail_utils: token expired, refreshing...")
         creds.refresh(GoogleRequest())
@@ -124,15 +153,22 @@ def _extract_otp(text: str) -> str | None:
 # Public API
 # ---------------------------------------------------------------------------
 
-def get_latest_otp(query: str) -> str | None:
+def get_latest_otp(query: str, *, credential_payload: dict | None = None) -> str | None:
     """Search Gmail with *query* and return the OTP from the most recent match.
+
+    If *credential_payload* is provided, it is used instead of process environment
+    / ``GMAIL_TOKEN``-style app settings. Otherwise behavior matches :func:`get_valid_credentials`.
 
     Returns ``None`` when credentials are unavailable, no messages match, or no
     numeric token can be extracted from the message body.
     """
     logging.info("gmail_utils: get_latest_otp query=%r", query)
 
-    creds = get_valid_credentials()
+    if credential_payload is not None:
+        raw = _credentials_from_payload(credential_payload)
+        creds = _ensure_valid(raw) if raw is not None else None
+    else:
+        creds = get_valid_credentials()
     if creds is None:
         logging.error("gmail_utils: aborting — no valid credentials")
         return None

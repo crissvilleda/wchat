@@ -13,8 +13,11 @@ from api.routers.me import router as me_router
 from api.routers.whatsapp import router as whatsapp_router
 from api.routers.users import router as users_router
 from api.routers.customers import router as customers_router
+from api.routers.mailboxes import router as mailboxes_router
+from api.routers.customer_streaming_entitlements import (
+    router as customer_streaming_entitlements_router,
+)
 from api.routers.streaming_services import router as streaming_services_router
-from api.routers.streaming_accounts import router as streaming_accounts_router
 from api.auth import auth_router
 from api.supertokens_init import init_supertokens
 
@@ -31,8 +34,9 @@ fastapi_app.include_router(me_router, prefix="/api")
 fastapi_app.include_router(auth_router, prefix="/api")
 fastapi_app.include_router(users_router, prefix="/api")
 fastapi_app.include_router(customers_router, prefix="/api")
+fastapi_app.include_router(customer_streaming_entitlements_router, prefix="/api")
+fastapi_app.include_router(mailboxes_router, prefix="/api")
 fastapi_app.include_router(streaming_services_router, prefix="/api")
-fastapi_app.include_router(streaming_accounts_router, prefix="/api")
 
 cors_origins = os.getenv("SUPERTOKENS_CORS_ORIGINS")
 if cors_origins:
