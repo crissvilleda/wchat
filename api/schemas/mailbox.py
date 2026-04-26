@@ -38,4 +38,4 @@ class MailboxOut(AuditedOut):
     token_expiry: datetime | None
     revoked_at: datetime | None
     max_customer_links: int | None
-    current_customer_link_count: int
+    current_customer_link_count: int = 0

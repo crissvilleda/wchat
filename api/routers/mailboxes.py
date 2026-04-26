@@ -18,7 +18,9 @@ from orm_models.mailbox import Mailbox
 
 async def _mailbox_out(svc: MailboxesService, row: Mailbox) -> MailboxOut:
     n = await svc.count_customer_links(mailbox_id=row.id)
-    return MailboxOut.model_validate(row, update={"current_customer_link_count": n})
+    return MailboxOut.model_validate(row).model_copy(
+        update={"current_customer_link_count": n}
+    )
 
 
 router = APIRouter(prefix="/mailboxes", tags=["mailboxes"])
@@ -42,7 +44,7 @@ async def create_mailbox(
             except ConflictError as e:
                 raise HTTPException(status_code=409, detail=str(e)) from e
     # New mailbox has 0 customer links; avoid extra round trip.
-    return MailboxOut.model_validate(row, update={"current_customer_link_count": 0})
+    return MailboxOut.model_validate(row)
 
 
 @router.get("/{mailbox_id}", response_model=MailboxOut)
