@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from typing import Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, model_validator
 
 
 class CustomerStreamingEntitlementAssignmentIn(BaseModel):
     streaming_service_id: int
     mailbox_id: int
-    status: str = Field(min_length=1, max_length=32, default="active")
 
 
 class CustomerStreamingEntitlementsSync(BaseModel):

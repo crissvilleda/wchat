@@ -32,14 +32,12 @@ class CustomerStreamingEntitlementsService:
         customer_id: int,
         streaming_service_id: int,
         mailbox_id: int,
-        status: str,
     ) -> CustomerStreamingEntitlement:
         return await self._repo.upsert(
             entity_id=entity_id,
             customer_id=customer_id,
             streaming_service_id=streaming_service_id,
             mailbox_id=mailbox_id,
-            status=status,
         )
 
     async def soft_delete(
@@ -75,7 +73,6 @@ class CustomerStreamingEntitlementsService:
                 customer_id=customer_id,
                 streaming_service_id=a.streaming_service_id,
                 mailbox_id=a.mailbox_id,
-                status=a.status,
             )
         await self._mailbox_repo.prune_orphan_customer_mailbox_links(
             entity_id=entity_id,
@@ -96,7 +93,7 @@ class CustomerStreamingEntitlementsService:
             mailbox_out: MailboxLinkOut | None = None
             entitlement_out: EntitlementLinkOut | None = None
             if ent is not None:
-                entitlement_out = EntitlementLinkOut(id=ent.id, status=ent.status)
+                entitlement_out = EntitlementLinkOut(id=ent.id)
                 mb = ent.mailbox
                 if (
                     mb is not None

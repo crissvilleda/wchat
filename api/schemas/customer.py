@@ -39,4 +39,5 @@ class CustomerOut(AuditedOut):
     entity_id: int
     name: str
     whatsapp_e164: str
+    streaming_service_slugs: list[str] = Field(default_factory=list)
 

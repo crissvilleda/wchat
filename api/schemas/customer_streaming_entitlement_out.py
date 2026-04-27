@@ -7,4 +7,3 @@ class CustomerStreamingEntitlementOut(AuditedOut):
     customer_id: int
     streaming_service_id: int
     mailbox_id: int | None
-    status: str

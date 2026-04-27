@@ -9,6 +9,9 @@ from api.deps.auth import resolve_tenant_context_http
 from api.deps.db import get_session_maker
 from api.deps.pagination import ListContext, get_list_context
 from api.schemas.pagination import CursorPage
+from api.repositories.customer_streaming_entitlements import (
+    DbCustomerStreamingEntitlementRepository,
+)
 from api.repositories.customers import DbCustomerRepository
 from api.repositories.errors import ConflictError, NotFoundError
 from api.schemas.customer import CustomerCreate, CustomerOut, CustomerUpdate
@@ -60,14 +63,25 @@ async def list_customers(
     async with session_maker() as db:
         ctx = await resolve_tenant_context_http(db, st_session)
         service = CustomersService(DbCustomerRepository(db))
+        ent_repo = DbCustomerStreamingEntitlementRepository(db)
         customers, next_cursor = await service.list(
             entity_id=ctx.entity_id,
             limit=list_ctx.limit,
             after_id=list_ctx.after_id,
             q=list_ctx.q,
         )
+        customer_ids = [c.id for c in customers]
+        slugs_by_customer = await ent_repo.list_streaming_service_slugs_for_customers(
+            entity_id=ctx.entity_id,
+            customer_ids=customer_ids,
+        )
     return CursorPage(
-        items=[CustomerOut.model_validate(c) for c in customers],
+        items=[
+            CustomerOut.model_validate(c).model_copy(
+                update={"streaming_service_slugs": slugs_by_customer.get(c.id, [])}
+            )
+            for c in customers
+        ],
         next_cursor=next_cursor,
     )
 

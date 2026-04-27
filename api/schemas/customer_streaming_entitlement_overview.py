@@ -13,7 +13,6 @@ class MailboxLinkOut(BaseModel):
 
 class EntitlementLinkOut(BaseModel):
     id: int
-    status: str
 
 
 class CustomerStreamingAssignmentOut(BaseModel):

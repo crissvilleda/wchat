@@ -29,7 +29,6 @@ class _FakeCustomerStreamingEntitlementRepo(CallRecorder):
         customer_id: int,
         streaming_service_id: int,
         mailbox_id: int,
-        status: str,
     ):
         self.record(
             "upsert",
@@ -38,7 +37,6 @@ class _FakeCustomerStreamingEntitlementRepo(CallRecorder):
                 "customer_id": customer_id,
                 "streaming_service_id": streaming_service_id,
                 "mailbox_id": mailbox_id,
-                "status": status,
             },
         )
         self.maybe_raise("upsert")
@@ -107,7 +105,7 @@ async def test_list_assignments_maps_services_entitlements_and_mailbox():
         entity_id=1,
         deleted_at=None,
     )
-    ent = SimpleNamespace(id=100, status="active", mailbox=mb)
+    ent = SimpleNamespace(id=100, mailbox=mb)
     s1 = _service(1, "netflix", "Netflix")
     s2 = _service(2, "disney", "Disney+")
     repo.return_values["list_assignments_for_customer"] = [
@@ -123,7 +121,7 @@ async def test_list_assignments_maps_services_entitlements_and_mailbox():
     ]
     assert len(rows) == 2
     assert rows[0].streaming_service.slug == "netflix"
-    assert rows[0].entitlement is not None and rows[0].entitlement.status == "active"
+    assert rows[0].entitlement is not None and rows[0].entitlement.id == 100
     assert rows[0].mailbox is not None
     assert rows[0].mailbox.mailbox_address == "pool@example.com"
     assert rows[1].entitlement is None and rows[1].mailbox is None
@@ -146,8 +144,8 @@ async def test_list_assignments_omits_mailbox_when_entity_mismatch_or_deleted():
         entity_id=1,
         deleted_at=_ts(),
     )
-    ent1 = SimpleNamespace(id=101, status="active", mailbox=mb_wrong_entity)
-    ent2 = SimpleNamespace(id=102, status="suspended", mailbox=mb_deleted)
+    ent1 = SimpleNamespace(id=101, mailbox=mb_wrong_entity)
+    ent2 = SimpleNamespace(id=102, mailbox=mb_deleted)
     repo.return_values["list_assignments_for_customer"] = [
         (_service(1, "a", "A"), ent1),
         (_service(2, "b", "B"), ent2),
@@ -202,12 +200,8 @@ async def test_sync_assignments_order_and_final_list():
 
     svc = CustomerStreamingEntitlementsService(ent_repo, mb_repo)
     assignments = [
-        CustomerStreamingEntitlementAssignmentIn(
-            streaming_service_id=1, mailbox_id=10, status="active"
-        ),
-        CustomerStreamingEntitlementAssignmentIn(
-            streaming_service_id=2, mailbox_id=10, status="suspended"
-        ),
+        CustomerStreamingEntitlementAssignmentIn(streaming_service_id=1, mailbox_id=10),
+        CustomerStreamingEntitlementAssignmentIn(streaming_service_id=2, mailbox_id=10),
     ]
     out = await svc.sync_assignments(
         entity_id=7, customer_id=5, assignments=assignments
@@ -233,7 +227,6 @@ async def test_sync_assignments_order_and_final_list():
             "customer_id": 5,
             "streaming_service_id": 1,
             "mailbox_id": 10,
-            "status": "active",
         },
     )
     assert mb_repo.calls[1] == (
@@ -247,7 +240,6 @@ async def test_sync_assignments_order_and_final_list():
             "customer_id": 5,
             "streaming_service_id": 2,
             "mailbox_id": 10,
-            "status": "suspended",
         },
     )
     assert mb_repo.calls[2] == (

@@ -58,7 +58,6 @@ async def test_upsert_revives_soft_deleted_entitlement_instead_of_insert():
                 customer_id=customer_id,
                 streaming_service_id=service_id,
                 mailbox_id=mailbox_id,
-                status="active",
             )
         )
         await session.commit()
@@ -81,10 +80,53 @@ async def test_upsert_revives_soft_deleted_entitlement_instead_of_insert():
                 customer_id=customer_id,
                 streaming_service_id=service_id,
                 mailbox_id=mailbox_id,
-                status="active",
             )
         assert restored.deleted_at is None
         assert restored.mailbox_id == mailbox_id
-        assert restored.status == "active"
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_list_streaming_service_slugs_for_customers():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(BaseModel.metadata.create_all)
+    session_maker = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    async with session_maker() as session:
+        ent_row = Entity(name="T")
+        session.add(ent_row)
+        await session.flush()
+        entity_id = ent_row.id
+        cust = Customer(entity_id=entity_id, name="A", whatsapp_e164="+15550001111")
+        mb = Mailbox(
+            entity_id=entity_id,
+            mailbox_address="a@gmail.com",
+            provider="gmail",
+        )
+        svc = StreamingService(slug="hulu", display_name="Hulu")
+        session.add_all([cust, mb, svc])
+        await session.flush()
+        session.add(CustomerMailbox(customer_id=cust.id, mailbox_id=mb.id))
+        session.add(
+            CustomerStreamingEntitlement(
+                customer_id=cust.id,
+                streaming_service_id=svc.id,
+                mailbox_id=mb.id,
+            )
+        )
+        await session.commit()
+        customer_id = cust.id
+
+    async with session_maker() as session:
+        repo = DbCustomerStreamingEntitlementRepository(session)
+        out = await repo.list_streaming_service_slugs_for_customers(
+            entity_id=entity_id,
+            customer_ids=[customer_id],
+        )
+    assert out[customer_id] == ["hulu"]
 
     await engine.dispose()

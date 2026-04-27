@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Protocol
@@ -25,7 +26,6 @@ class CustomerStreamingEntitlementRepository(Protocol):
         customer_id: int,
         streaming_service_id: int,
         mailbox_id: int,
-        status: str,
     ) -> CustomerStreamingEntitlement: ...
 
     async def soft_delete_entitlements_not_in(
@@ -42,6 +42,13 @@ class CustomerStreamingEntitlementRepository(Protocol):
         entity_id: int,
         customer_id: int,
     ) -> Sequence[tuple[StreamingService, CustomerStreamingEntitlement | None]]: ...
+
+    async def list_streaming_service_slugs_for_customers(
+        self,
+        *,
+        entity_id: int,
+        customer_ids: list[int],
+    ) -> dict[int, list[str]]: ...
 
 
 class DbCustomerStreamingEntitlementRepository:
@@ -96,7 +103,6 @@ class DbCustomerStreamingEntitlementRepository:
         customer_id: int,
         streaming_service_id: int,
         mailbox_id: int,
-        status: str,
     ) -> CustomerStreamingEntitlement:
         await self._assert_customer(entity_id, customer_id)
         await self._assert_streaming_service(streaming_service_id)
@@ -113,13 +119,11 @@ class DbCustomerStreamingEntitlementRepository:
                 customer_id=customer_id,
                 streaming_service_id=streaming_service_id,
                 mailbox_id=mailbox_id,
-                status=status,
             )
             self._db.add(row)
         else:
             row.deleted_at = None
             row.mailbox_id = mailbox_id
-            row.status = status
         try:
             await self._db.flush()
         except IntegrityError as e:
@@ -179,6 +183,42 @@ class DbCustomerStreamingEntitlementRepository:
         ent_by_service_id = {e.streaming_service_id: e for e in ents}
 
         return [(s, ent_by_service_id.get(s.id)) for s in services]
+
+    async def list_streaming_service_slugs_for_customers(
+        self,
+        *,
+        entity_id: int,
+        customer_ids: list[int],
+    ) -> dict[int, list[str]]:
+        if not customer_ids:
+            return {}
+        stmt = (
+            select(
+                CustomerStreamingEntitlement.customer_id,
+                StreamingService.slug,
+            )
+            .join(Customer, Customer.id == CustomerStreamingEntitlement.customer_id)
+            .join(
+                StreamingService,
+                StreamingService.id == CustomerStreamingEntitlement.streaming_service_id,
+            )
+            .where(
+                Customer.entity_id == entity_id,
+                Customer.deleted_at.is_(None),
+                Customer.id.in_(customer_ids),
+                CustomerStreamingEntitlement.deleted_at.is_(None),
+                StreamingService.deleted_at.is_(None),
+            )
+            .order_by(
+                CustomerStreamingEntitlement.customer_id.asc(),
+                StreamingService.slug.asc(),
+            )
+        )
+        rows = (await self._db.execute(stmt)).all()
+        by_customer: dict[int, list[str]] = defaultdict(list)
+        for customer_id, slug in rows:
+            by_customer[int(customer_id)].append(slug)
+        return {cid: by_customer[cid] for cid in by_customer}
 
     async def soft_delete(
         self, *, entity_id: int, customer_id: int, streaming_service_id: int

@@ -65,7 +65,6 @@ async def find_mailbox_for_customer_service(
             Customer.deleted_at.is_(None),
             CustomerStreamingEntitlement.streaming_service_id == streaming_service_id,
             CustomerStreamingEntitlement.deleted_at.is_(None),
-            CustomerStreamingEntitlement.status == "active",
             CustomerStreamingEntitlement.mailbox_id.isnot(None),
             Mailbox.deleted_at.is_(None),
         )
