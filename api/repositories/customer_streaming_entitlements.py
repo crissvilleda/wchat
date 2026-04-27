@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from api.repositories.errors import ConflictError, NotFoundError
 from orm_models.customer import Customer
@@ -25,6 +27,13 @@ class CustomerStreamingEntitlementRepository(Protocol):
         mailbox_id: int,
         status: str,
     ) -> CustomerStreamingEntitlement: ...
+
+    async def list_assignments_for_customer(
+        self,
+        *,
+        entity_id: int,
+        customer_id: int,
+    ) -> Sequence[tuple[StreamingService, CustomerStreamingEntitlement | None]]: ...
 
 
 class DbCustomerStreamingEntitlementRepository:
@@ -109,6 +118,34 @@ class DbCustomerStreamingEntitlementRepository:
             raise ConflictError("Entitlement could not be saved") from e
         await self._db.refresh(row)
         return row
+
+    async def list_assignments_for_customer(
+        self,
+        *,
+        entity_id: int,
+        customer_id: int,
+    ) -> Sequence[tuple[StreamingService, CustomerStreamingEntitlement | None]]:
+        await self._assert_customer(entity_id, customer_id)
+
+        svc_stmt = (
+            select(StreamingService)
+            .where(StreamingService.deleted_at.is_(None))
+            .order_by(StreamingService.id.asc())
+        )
+        services = (await self._db.execute(svc_stmt)).scalars().all()
+
+        ent_stmt = (
+            select(CustomerStreamingEntitlement)
+            .where(
+                CustomerStreamingEntitlement.customer_id == customer_id,
+                CustomerStreamingEntitlement.deleted_at.is_(None),
+            )
+            .options(joinedload(CustomerStreamingEntitlement.mailbox))
+        )
+        ents = (await self._db.execute(ent_stmt)).unique().scalars().all()
+        ent_by_service_id = {e.streaming_service_id: e for e in ents}
+
+        return [(s, ent_by_service_id.get(s.id)) for s in services]
 
     async def soft_delete(
         self, *, entity_id: int, customer_id: int, streaming_service_id: int
