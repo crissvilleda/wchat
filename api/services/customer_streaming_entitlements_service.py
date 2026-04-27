@@ -3,18 +3,27 @@ from __future__ import annotations
 from api.repositories.customer_streaming_entitlements import (
     CustomerStreamingEntitlementRepository,
 )
+from api.repositories.mailboxes import MailboxRepository
 from api.schemas.customer_streaming_entitlement_overview import (
     CustomerStreamingAssignmentOut,
     EntitlementLinkOut,
     MailboxLinkOut,
+)
+from api.schemas.customer_streaming_entitlements_sync import (
+    CustomerStreamingEntitlementAssignmentIn,
 )
 from api.schemas.streaming_service import StreamingServiceOut
 from orm_models.customer_streaming_entitlement import CustomerStreamingEntitlement
 
 
 class CustomerStreamingEntitlementsService:
-    def __init__(self, repo: CustomerStreamingEntitlementRepository) -> None:
+    def __init__(
+        self,
+        repo: CustomerStreamingEntitlementRepository,
+        mailbox_repo: MailboxRepository,
+    ) -> None:
         self._repo = repo
+        self._mailbox_repo = mailbox_repo
 
     async def upsert(
         self,
@@ -40,6 +49,40 @@ class CustomerStreamingEntitlementsService:
             entity_id=entity_id,
             customer_id=customer_id,
             streaming_service_id=streaming_service_id,
+        )
+
+    async def sync_assignments(
+        self,
+        *,
+        entity_id: int,
+        customer_id: int,
+        assignments: list[CustomerStreamingEntitlementAssignmentIn],
+    ) -> list[CustomerStreamingAssignmentOut]:
+        keep = {a.streaming_service_id for a in assignments}
+        await self._repo.soft_delete_entitlements_not_in(
+            entity_id=entity_id,
+            customer_id=customer_id,
+            keep_streaming_service_ids=keep,
+        )
+        for a in assignments:
+            await self._mailbox_repo.ensure_customer_mailbox_link(
+                entity_id=entity_id,
+                mailbox_id=a.mailbox_id,
+                customer_id=customer_id,
+            )
+            await self._repo.upsert(
+                entity_id=entity_id,
+                customer_id=customer_id,
+                streaming_service_id=a.streaming_service_id,
+                mailbox_id=a.mailbox_id,
+                status=a.status,
+            )
+        await self._mailbox_repo.prune_orphan_customer_mailbox_links(
+            entity_id=entity_id,
+            customer_id=customer_id,
+        )
+        return await self.list_assignments_for_customer(
+            entity_id=entity_id, customer_id=customer_id
         )
 
     async def list_assignments_for_customer(

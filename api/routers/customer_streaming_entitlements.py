@@ -11,11 +11,13 @@ from api.repositories.customer_streaming_entitlements import (
     DbCustomerStreamingEntitlementRepository,
 )
 from api.repositories.errors import ConflictError, NotFoundError
+from api.repositories.mailboxes import DbMailboxRepository
 from api.schemas.customer_streaming_entitlement_out import CustomerStreamingEntitlementOut
 from api.schemas.customer_streaming_entitlement_overview import CustomerStreamingAssignmentOut
 from api.schemas.customer_streaming_entitlement_upsert import (
     CustomerStreamingEntitlementUpsert,
 )
+from api.schemas.customer_streaming_entitlements_sync import CustomerStreamingEntitlementsSync
 from api.services.customer_streaming_entitlements_service import (
     CustomerStreamingEntitlementsService,
 )
@@ -36,7 +38,8 @@ async def list_customer_streaming_entitlements(
     async with session_maker() as db:
         ctx = await resolve_tenant_context_http(db, st_session)
         service = CustomerStreamingEntitlementsService(
-            DbCustomerStreamingEntitlementRepository(db)
+            DbCustomerStreamingEntitlementRepository(db),
+            DbMailboxRepository(db),
         )
         try:
             return await service.list_assignments_for_customer(
@@ -45,6 +48,35 @@ async def list_customer_streaming_entitlements(
             )
         except NotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.put(
+    "/{customer_id}/streaming-entitlements",
+    response_model=list[CustomerStreamingAssignmentOut],
+)
+async def sync_customer_streaming_entitlements(
+    customer_id: int,
+    payload: CustomerStreamingEntitlementsSync,
+    st_session: SessionContainer = Depends(verify_session()),
+    session_maker: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
+) -> list[CustomerStreamingAssignmentOut]:
+    async with session_maker() as db:
+        async with db.begin():
+            ctx = await resolve_tenant_context_http(db, st_session)
+            service = CustomerStreamingEntitlementsService(
+                DbCustomerStreamingEntitlementRepository(db),
+                DbMailboxRepository(db),
+            )
+            try:
+                return await service.sync_assignments(
+                    entity_id=ctx.entity_id,
+                    customer_id=customer_id,
+                    assignments=payload.assignments,
+                )
+            except NotFoundError as e:
+                raise HTTPException(status_code=404, detail=str(e)) from e
+            except ConflictError as e:
+                raise HTTPException(status_code=409, detail=str(e)) from e
 
 
 @router.put(
@@ -62,7 +94,8 @@ async def upsert_customer_streaming_entitlement(
         async with db.begin():
             ctx = await resolve_tenant_context_http(db, st_session)
             service = CustomerStreamingEntitlementsService(
-                DbCustomerStreamingEntitlementRepository(db)
+                DbCustomerStreamingEntitlementRepository(db),
+                DbMailboxRepository(db),
             )
             try:
                 row = await service.upsert(
@@ -92,7 +125,8 @@ async def delete_customer_streaming_entitlement(
         async with db.begin():
             ctx = await resolve_tenant_context_http(db, st_session)
             service = CustomerStreamingEntitlementsService(
-                DbCustomerStreamingEntitlementRepository(db)
+                DbCustomerStreamingEntitlementRepository(db),
+                DbMailboxRepository(db),
             )
             try:
                 await service.soft_delete(
