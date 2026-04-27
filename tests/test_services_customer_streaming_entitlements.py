@@ -6,8 +6,19 @@ from types import SimpleNamespace
 import pytest
 
 from api.repositories.errors import NotFoundError
+from api.schemas.customer_streaming_entitlements_sync import (
+    CustomerStreamingEntitlementAssignmentIn,
+)
 from api.services.customer_streaming_entitlements_service import CustomerStreamingEntitlementsService
 from tests.conftest import CallRecorder
+
+
+class _NoopMailboxRepo:
+    async def ensure_customer_mailbox_link(self, *args, **kwargs) -> None:
+        return None
+
+    async def prune_orphan_customer_mailbox_links(self, *args, **kwargs) -> None:
+        return None
 
 
 class _FakeCustomerStreamingEntitlementRepo(CallRecorder):
@@ -20,12 +31,40 @@ class _FakeCustomerStreamingEntitlementRepo(CallRecorder):
         mailbox_id: int,
         status: str,
     ):
-        raise AssertionError("not used in these tests")
+        self.record(
+            "upsert",
+            {
+                "entity_id": entity_id,
+                "customer_id": customer_id,
+                "streaming_service_id": streaming_service_id,
+                "mailbox_id": mailbox_id,
+                "status": status,
+            },
+        )
+        self.maybe_raise("upsert")
+        return self.value("upsert")
 
     async def soft_delete(
         self, *, entity_id: int, customer_id: int, streaming_service_id: int
     ) -> None:
         raise AssertionError("not used in these tests")
+
+    async def soft_delete_entitlements_not_in(
+        self,
+        *,
+        entity_id: int,
+        customer_id: int,
+        keep_streaming_service_ids: set[int],
+    ) -> None:
+        self.record(
+            "soft_delete_entitlements_not_in",
+            {
+                "entity_id": entity_id,
+                "customer_id": customer_id,
+                "keep_streaming_service_ids": keep_streaming_service_ids,
+            },
+        )
+        self.maybe_raise("soft_delete_entitlements_not_in")
 
     async def list_assignments_for_customer(
         self, *, entity_id: int, customer_id: int
@@ -76,7 +115,7 @@ async def test_list_assignments_maps_services_entitlements_and_mailbox():
         (s2, None),
     ]
 
-    svc = CustomerStreamingEntitlementsService(repo)
+    svc = CustomerStreamingEntitlementsService(repo, _NoopMailboxRepo())
     rows = await svc.list_assignments_for_customer(entity_id=1, customer_id=5)
 
     assert repo.calls == [
@@ -114,7 +153,7 @@ async def test_list_assignments_omits_mailbox_when_entity_mismatch_or_deleted():
         (_service(2, "b", "B"), ent2),
     ]
 
-    svc = CustomerStreamingEntitlementsService(repo)
+    svc = CustomerStreamingEntitlementsService(repo, _NoopMailboxRepo())
     rows = await svc.list_assignments_for_customer(entity_id=1, customer_id=1)
 
     assert rows[0].entitlement is not None and rows[0].mailbox is None
@@ -126,6 +165,116 @@ async def test_list_assignments_propagates_not_found():
     repo = _FakeCustomerStreamingEntitlementRepo()
     repo.side_effects["list_assignments_for_customer"] = NotFoundError("Customer not found")
 
-    svc = CustomerStreamingEntitlementsService(repo)
+    svc = CustomerStreamingEntitlementsService(repo, _NoopMailboxRepo())
     with pytest.raises(NotFoundError):
         await svc.list_assignments_for_customer(entity_id=1, customer_id=3)
+
+
+class _FakeMailboxRepoForSync(CallRecorder):
+    async def ensure_customer_mailbox_link(
+        self, *, entity_id: int, mailbox_id: int, customer_id: int
+    ) -> None:
+        self.record(
+            "ensure_customer_mailbox_link",
+            {
+                "entity_id": entity_id,
+                "mailbox_id": mailbox_id,
+                "customer_id": customer_id,
+            },
+        )
+        self.maybe_raise("ensure_customer_mailbox_link")
+
+    async def prune_orphan_customer_mailbox_links(
+        self, *, entity_id: int, customer_id: int
+    ) -> None:
+        self.record(
+            "prune_orphan_customer_mailbox_links",
+            {"entity_id": entity_id, "customer_id": customer_id},
+        )
+        self.maybe_raise("prune_orphan_customer_mailbox_links")
+
+
+@pytest.mark.asyncio
+async def test_sync_assignments_order_and_final_list():
+    ent_repo = _FakeCustomerStreamingEntitlementRepo()
+    mb_repo = _FakeMailboxRepoForSync()
+    ent_repo.return_values["list_assignments_for_customer"] = []
+
+    svc = CustomerStreamingEntitlementsService(ent_repo, mb_repo)
+    assignments = [
+        CustomerStreamingEntitlementAssignmentIn(
+            streaming_service_id=1, mailbox_id=10, status="active"
+        ),
+        CustomerStreamingEntitlementAssignmentIn(
+            streaming_service_id=2, mailbox_id=10, status="suspended"
+        ),
+    ]
+    out = await svc.sync_assignments(
+        entity_id=7, customer_id=5, assignments=assignments
+    )
+
+    assert out == []
+    assert ent_repo.calls[0] == (
+        "soft_delete_entitlements_not_in",
+        {
+            "entity_id": 7,
+            "customer_id": 5,
+            "keep_streaming_service_ids": {1, 2},
+        },
+    )
+    assert mb_repo.calls[0] == (
+        "ensure_customer_mailbox_link",
+        {"entity_id": 7, "mailbox_id": 10, "customer_id": 5},
+    )
+    assert ent_repo.calls[1] == (
+        "upsert",
+        {
+            "entity_id": 7,
+            "customer_id": 5,
+            "streaming_service_id": 1,
+            "mailbox_id": 10,
+            "status": "active",
+        },
+    )
+    assert mb_repo.calls[1] == (
+        "ensure_customer_mailbox_link",
+        {"entity_id": 7, "mailbox_id": 10, "customer_id": 5},
+    )
+    assert ent_repo.calls[2] == (
+        "upsert",
+        {
+            "entity_id": 7,
+            "customer_id": 5,
+            "streaming_service_id": 2,
+            "mailbox_id": 10,
+            "status": "suspended",
+        },
+    )
+    assert mb_repo.calls[2] == (
+        "prune_orphan_customer_mailbox_links",
+        {"entity_id": 7, "customer_id": 5},
+    )
+    assert ent_repo.calls[3] == (
+        "list_assignments_for_customer",
+        {"entity_id": 7, "customer_id": 5},
+    )
+
+
+def test_sync_schema_rejects_duplicate_streaming_service():
+    from pydantic import ValidationError
+
+    from api.schemas.customer_streaming_entitlements_sync import (
+        CustomerStreamingEntitlementsSync,
+    )
+
+    with pytest.raises(ValidationError):
+        CustomerStreamingEntitlementsSync(
+            assignments=[
+                CustomerStreamingEntitlementAssignmentIn(
+                    streaming_service_id=1, mailbox_id=1
+                ),
+                CustomerStreamingEntitlementAssignmentIn(
+                    streaming_service_id=1, mailbox_id=2
+                ),
+            ]
+        )

@@ -47,6 +47,14 @@ class _FakeMailboxRepo(CallRecorder):
         self.maybe_raise("unlink_customer")
         return None
 
+    async def ensure_customer_mailbox_link(self, **kwargs):
+        self.record("ensure_customer_mailbox_link", kwargs)
+        self.maybe_raise("ensure_customer_mailbox_link")
+
+    async def prune_orphan_customer_mailbox_links(self, **kwargs):
+        self.record("prune_orphan_customer_mailbox_links", kwargs)
+        self.maybe_raise("prune_orphan_customer_mailbox_links")
+
 
 @pytest.mark.asyncio
 async def test_mailboxes_service_create_forwards_args():
