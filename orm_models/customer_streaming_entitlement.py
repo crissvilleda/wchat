@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, ForeignKey, String, UniqueConstraint
+from sqlalchemy import BigInteger, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import AuditedSoftDeleteModel
@@ -34,9 +34,6 @@ class CustomerStreamingEntitlement(AuditedSoftDeleteModel):
         nullable=True,
         index=True,
     )
-
-    # Keep as string for flexibility (active/suspended/etc.).
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
 
     customer: Mapped["Customer"] = relationship(back_populates="entitlements")
     streaming_service: Mapped["StreamingService"] = relationship(back_populates="entitlements")
