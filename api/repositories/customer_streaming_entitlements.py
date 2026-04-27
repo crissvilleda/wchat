@@ -28,6 +28,14 @@ class CustomerStreamingEntitlementRepository(Protocol):
         status: str,
     ) -> CustomerStreamingEntitlement: ...
 
+    async def soft_delete_entitlements_not_in(
+        self,
+        *,
+        entity_id: int,
+        customer_id: int,
+        keep_streaming_service_ids: set[int],
+    ) -> None: ...
+
     async def list_assignments_for_customer(
         self,
         *,
@@ -98,7 +106,6 @@ class DbCustomerStreamingEntitlementRepository:
         stmt = select(CustomerStreamingEntitlement).where(
             CustomerStreamingEntitlement.customer_id == customer_id,
             CustomerStreamingEntitlement.streaming_service_id == streaming_service_id,
-            CustomerStreamingEntitlement.deleted_at.is_(None),
         )
         row = (await self._db.execute(stmt)).scalars().first()
         if row is None:
@@ -110,6 +117,7 @@ class DbCustomerStreamingEntitlementRepository:
             )
             self._db.add(row)
         else:
+            row.deleted_at = None
             row.mailbox_id = mailbox_id
             row.status = status
         try:
@@ -118,6 +126,31 @@ class DbCustomerStreamingEntitlementRepository:
             raise ConflictError("Entitlement could not be saved") from e
         await self._db.refresh(row)
         return row
+
+    async def soft_delete_entitlements_not_in(
+        self,
+        *,
+        entity_id: int,
+        customer_id: int,
+        keep_streaming_service_ids: set[int],
+    ) -> None:
+        await self._assert_customer(entity_id, customer_id)
+        conds = [
+            CustomerStreamingEntitlement.customer_id == customer_id,
+            CustomerStreamingEntitlement.deleted_at.is_(None),
+        ]
+        if keep_streaming_service_ids:
+            conds.append(
+                CustomerStreamingEntitlement.streaming_service_id.not_in(
+                    tuple(keep_streaming_service_ids)
+                )
+            )
+        stmt = select(CustomerStreamingEntitlement).where(*conds)
+        rows = (await self._db.execute(stmt)).scalars().all()
+        now = datetime.now(tz=timezone.utc)
+        for row in rows:
+            row.deleted_at = now
+        await self._db.flush()
 
     async def list_assignments_for_customer(
         self,
