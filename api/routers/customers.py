@@ -14,7 +14,12 @@ from api.repositories.customer_streaming_entitlements import (
 )
 from api.repositories.customers import DbCustomerRepository
 from api.repositories.errors import ConflictError, NotFoundError
-from api.schemas.customer import CustomerCreate, CustomerOut, CustomerUpdate
+from api.schemas.customer import (
+    CustomerCreate,
+    CustomerOut,
+    CustomerStreamingServiceItem,
+    CustomerUpdate,
+)
 from api.services.customers_service import CustomersService
 
 
@@ -71,14 +76,19 @@ async def list_customers(
             q=list_ctx.q,
         )
         customer_ids = [c.id for c in customers]
-        slugs_by_customer = await ent_repo.list_streaming_service_slugs_for_customers(
+        services_by_customer = await ent_repo.list_streaming_services_for_customers(
             entity_id=ctx.entity_id,
             customer_ids=customer_ids,
         )
     return CursorPage(
         items=[
             CustomerOut.model_validate(c).model_copy(
-                update={"streaming_service_slugs": slugs_by_customer.get(c.id, [])}
+                update={
+                    "streaming_services": [
+                        CustomerStreamingServiceItem(slug=s, display_name=dn)
+                        for s, dn in services_by_customer.get(c.id, [])
+                    ]
+                }
             )
             for c in customers
         ],

@@ -43,12 +43,12 @@ class CustomerStreamingEntitlementRepository(Protocol):
         customer_id: int,
     ) -> Sequence[tuple[StreamingService, CustomerStreamingEntitlement | None]]: ...
 
-    async def list_streaming_service_slugs_for_customers(
+    async def list_streaming_services_for_customers(
         self,
         *,
         entity_id: int,
         customer_ids: list[int],
-    ) -> dict[int, list[str]]: ...
+    ) -> dict[int, list[tuple[str, str]]]: ...
 
 
 class DbCustomerStreamingEntitlementRepository:
@@ -184,18 +184,19 @@ class DbCustomerStreamingEntitlementRepository:
 
         return [(s, ent_by_service_id.get(s.id)) for s in services]
 
-    async def list_streaming_service_slugs_for_customers(
+    async def list_streaming_services_for_customers(
         self,
         *,
         entity_id: int,
         customer_ids: list[int],
-    ) -> dict[int, list[str]]:
+    ) -> dict[int, list[tuple[str, str]]]:
         if not customer_ids:
             return {}
         stmt = (
             select(
                 CustomerStreamingEntitlement.customer_id,
                 StreamingService.slug,
+                StreamingService.display_name,
             )
             .join(Customer, Customer.id == CustomerStreamingEntitlement.customer_id)
             .join(
@@ -215,9 +216,9 @@ class DbCustomerStreamingEntitlementRepository:
             )
         )
         rows = (await self._db.execute(stmt)).all()
-        by_customer: dict[int, list[str]] = defaultdict(list)
-        for customer_id, slug in rows:
-            by_customer[int(customer_id)].append(slug)
+        by_customer: dict[int, list[tuple[str, str]]] = defaultdict(list)
+        for customer_id, slug, display_name in rows:
+            by_customer[int(customer_id)].append((slug, display_name))
         return {cid: by_customer[cid] for cid in by_customer}
 
     async def soft_delete(

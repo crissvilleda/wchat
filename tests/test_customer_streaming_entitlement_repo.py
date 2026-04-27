@@ -88,7 +88,7 @@ async def test_upsert_revives_soft_deleted_entitlement_instead_of_insert():
 
 
 @pytest.mark.asyncio
-async def test_list_streaming_service_slugs_for_customers():
+async def test_list_streaming_services_for_customers():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(BaseModel.metadata.create_all)
@@ -123,10 +123,10 @@ async def test_list_streaming_service_slugs_for_customers():
 
     async with session_maker() as session:
         repo = DbCustomerStreamingEntitlementRepository(session)
-        out = await repo.list_streaming_service_slugs_for_customers(
+        out = await repo.list_streaming_services_for_customers(
             entity_id=entity_id,
             customer_ids=[customer_id],
         )
-    assert out[customer_id] == ["hulu"]
+    assert out[customer_id] == [("hulu", "Hulu")]
 
     await engine.dispose()

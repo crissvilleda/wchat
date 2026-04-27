@@ -9,6 +9,11 @@ from api.schemas.common import AuditedOut
 _E164_RE = re.compile(r"^\+[1-9]\d{7,14}$")
 
 
+class CustomerStreamingServiceItem(BaseModel):
+    slug: str
+    display_name: str
+
+
 class CustomerCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     whatsapp_e164: str = Field(min_length=8, max_length=32)
@@ -39,5 +44,5 @@ class CustomerOut(AuditedOut):
     entity_id: int
     name: str
     whatsapp_e164: str
-    streaming_service_slugs: list[str] = Field(default_factory=list)
+    streaming_services: list[CustomerStreamingServiceItem] = Field(default_factory=list)
 
