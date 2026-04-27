@@ -57,6 +57,14 @@ class MailboxRepository(Protocol):
 
     async def link_customer(self, *, entity_id: int, mailbox_id: int, customer_id: int) -> CustomerMailbox: ...
 
+    async def ensure_customer_mailbox_link(
+        self, *, entity_id: int, mailbox_id: int, customer_id: int
+    ) -> None: ...
+
+    async def prune_orphan_customer_mailbox_links(
+        self, *, entity_id: int, customer_id: int
+    ) -> None: ...
+
     async def unlink_customer(self, *, entity_id: int, mailbox_id: int, customer_id: int) -> None: ...
 
 
@@ -201,6 +209,55 @@ class DbMailboxRepository:
             raise ConflictError("Customer is already linked to this mailbox") from e
         await self._db.refresh(link)
         return link
+
+    async def ensure_customer_mailbox_link(
+        self, *, entity_id: int, mailbox_id: int, customer_id: int
+    ) -> None:
+        m = await self.get(entity_id=entity_id, mailbox_id=mailbox_id)
+        await self._get_customer_in_entity(entity_id, customer_id)
+        stmt = select(CustomerMailbox).where(
+            CustomerMailbox.customer_id == customer_id,
+            CustomerMailbox.mailbox_id == mailbox_id,
+        )
+        link = (await self._db.execute(stmt)).scalars().first()
+        if link is not None and link.deleted_at is None:
+            return
+        if link is not None and link.deleted_at is not None:
+            n = await self._count_active_links(m.id)
+            if m.max_customer_links is not None and n >= m.max_customer_links:
+                raise ConflictError("Mailbox has reached max customer links")
+            link.deleted_at = None
+            await self._db.flush()
+            return
+        n = await self._count_active_links(m.id)
+        if m.max_customer_links is not None and n >= m.max_customer_links:
+            raise ConflictError("Mailbox has reached max customer links")
+        new_link = CustomerMailbox(customer_id=customer_id, mailbox_id=mailbox_id)
+        self._db.add(new_link)
+        try:
+            await self._db.flush()
+        except IntegrityError as e:
+            raise ConflictError("Customer is already linked to this mailbox") from e
+
+    async def prune_orphan_customer_mailbox_links(
+        self, *, entity_id: int, customer_id: int
+    ) -> None:
+        await self._get_customer_in_entity(entity_id, customer_id)
+        links_stmt = select(CustomerMailbox).where(
+            CustomerMailbox.customer_id == customer_id,
+            CustomerMailbox.deleted_at.is_(None),
+        )
+        links = (await self._db.execute(links_stmt)).scalars().all()
+        now = datetime.now(tz=timezone.utc)
+        for link in links:
+            ent_stmt = select(CustomerStreamingEntitlement.id).where(
+                CustomerStreamingEntitlement.customer_id == customer_id,
+                CustomerStreamingEntitlement.mailbox_id == link.mailbox_id,
+                CustomerStreamingEntitlement.deleted_at.is_(None),
+            )
+            if not (await self._db.execute(ent_stmt)).first():
+                link.deleted_at = now
+        await self._db.flush()
 
     async def unlink_customer(self, *, entity_id: int, mailbox_id: int, customer_id: int) -> None:
         await self.get(entity_id=entity_id, mailbox_id=mailbox_id)
