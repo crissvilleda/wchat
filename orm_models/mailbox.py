@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import AuditedSoftDeleteModel
@@ -18,6 +18,18 @@ class Mailbox(EntityIsolationModel, AuditedSoftDeleteModel):
     __tablename__ = "mailbox"
     __table_args__ = (
         UniqueConstraint("entity_id", "mailbox_address", name="uq_mailbox_entity_address"),
+        Index(
+            "ix_mailbox_mailbox_address_trgm",
+            "mailbox_address",
+            postgresql_using="gin",
+            postgresql_ops={"mailbox_address": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_mailbox_provider_trgm",
+            "provider",
+            postgresql_using="gin",
+            postgresql_ops={"provider": "gin_trgm_ops"},
+        ),
     )
 
     provider: Mapped[str] = mapped_column(

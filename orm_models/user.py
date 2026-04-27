@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import String, UniqueConstraint
+from sqlalchemy import Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import AuditedSoftDeleteModel
@@ -11,6 +11,18 @@ class User(EntityIsolationModel, AuditedSoftDeleteModel):
     __tablename__ = "user"
     __table_args__ = (
         UniqueConstraint("supertokens_user_id", name="uq_users_supertokens_user_id"),
+        Index(
+            "ix_user_name_trgm",
+            "name",
+            postgresql_using="gin",
+            postgresql_ops={"name": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_user_email_trgm",
+            "email",
+            postgresql_using="gin",
+            postgresql_ops={"email": "gin_trgm_ops"},
+        ),
     )
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
