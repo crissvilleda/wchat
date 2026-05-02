@@ -4,7 +4,17 @@ import os
 from functools import lru_cache
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+from uuid import uuid4
 
+# asyncpg
+from asyncpg import Connection
+
+
+class CustomConnection(Connection):
+    def _get_unique_id(self, prefix: str) -> str:
+        return f'__asyncpg_{prefix}_{uuid4()}__'
+        
 
 def _get_db_url_async() -> str:
     url = os.getenv("DB_URL_ASYNC")
@@ -23,7 +33,12 @@ def get_async_engine() -> AsyncEngine:
     return create_async_engine(
         url,
         pool_pre_ping=True,
-        connect_args=connect_args,
+        poolclass=NullPool,
+        connect_args={
+            **connect_args,
+            "statement_cache_size": 0,
+            "connection_class": CustomConnection,
+        },
     )
 
 
