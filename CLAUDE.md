@@ -51,6 +51,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Python 3.13+
 - `uv` package manager (or `pip` with `pyproject.toml`)
 - Azure Functions Core Tools (optional, for local Azure testing)
+- `dotenvx` — required to decrypt `.env` and inject secrets at runtime (`npm install -g @dotenvx/dotenvx`)
 
 ### Installation
 
@@ -66,27 +67,27 @@ pip install -e ".[dev]"
 
 **Run tests:**
 ```bash
-pytest
-pytest tests/test_whatsapp_webhook.py  # Single test file
-pytest -v                               # Verbose output
-pytest -k webhook                       # Filter by test name
+dotenvx run -- uv run pytest
+dotenvx run -- uv run pytest tests/test_whatsapp_webhook.py  # Single test file
+dotenvx run -- uv run pytest -v                               # Verbose output
+dotenvx run -- uv run pytest -k webhook                       # Filter by test name
 ```
 
 **Run locally (Azure Functions):**
 ```bash
-func start
+dotenvx run -- func start
 # API available at http://localhost:7071/api/whatsapp/webhook
 ```
 
 **Run FastAPI dev server (alternative):**
 ```bash
-uvicorn api.app:fastapi_app --reload --port 8000
+dotenvx run -- uv run uvicorn api.app:fastapi_app --reload --port 8000
 ```
 
 **Format & lint (when available):**
 ```bash
-ruff check .
-ruff format .
+dotenvx run -- uv run ruff check .
+dotenvx run -- uv run ruff format .
 ```
 
 ## Tech Stack & Dependencies
@@ -135,6 +136,10 @@ async def test_whatsapp_webhook_accepts_twilio_form_and_replies(monkeypatch):
 
 ## Environment Variables
 
+> **Always use `dotenvx run --` as a prefix for any command that requires env vars.**
+> The project stores secrets in an encrypted `.env` file. dotenvx decrypts it at runtime.
+> Never run `pytest`, `uvicorn`, `func start`, or linting commands without this prefix.
+
 **Required for deployment:**
 ```
 TWILIO_ACCOUNT_SID       # Twilio account ID
@@ -146,7 +151,7 @@ GMAIL_CLIENT_ID          # OAuth client ID
 GMAIL_CLIENT_SECRET      # OAuth client secret
 ```
 
-For local development, copy `local.settings.json` and populate with test values.
+For local development, use `dotenvx run --` to inject secrets from the encrypted `.env` file. Keep `.env.keys` private and never commit it.
 
 ## Key Files & Their Purpose
 
