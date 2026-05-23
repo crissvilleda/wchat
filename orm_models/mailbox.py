@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import JSON, DateTime, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.ext.mutable import MutableDict
 
 from .base import AuditedSoftDeleteModel
 from .entity_isolation import EntityIsolationModel
@@ -39,7 +40,7 @@ class Mailbox(EntityIsolationModel, AuditedSoftDeleteModel):
     )
     mailbox_address: Mapped[str] = mapped_column(String(320), nullable=False)
 
-    credential_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    credential_payload: Mapped[dict | None] = mapped_column(MutableDict.as_mutable(JSON), nullable=True)
     secret_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     token_scopes: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     token_expiry: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
