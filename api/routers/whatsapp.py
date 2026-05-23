@@ -1,7 +1,5 @@
-import asyncio
 import logging
 import os
-from functools import partial
 from typing import Annotated, Any
 from urllib.parse import parse_qs
 
@@ -11,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import gmail_utils
 from api.deps.db import get_session_maker
+from thread_utils import run_in_thread
 from api.services.otp_mailbox import (
     find_mailbox_for_customer_service,
     gmail_search_query_for_service,
@@ -141,11 +140,11 @@ async def whatsapp_webhook(
         )
     elif matched_label and query:
         if use_mailbox and cred_payload is not None:
-            otp = await asyncio.to_thread(
-                partial(gmail_utils.get_latest_otp, query, credential_payload=cred_payload)
+            otp = await run_in_thread(
+                gmail_utils.get_latest_otp, query, credential_payload=cred_payload
             )
         else:
-            otp = await asyncio.to_thread(gmail_utils.get_latest_otp, query)
+            otp = await run_in_thread(gmail_utils.get_latest_otp, query)
         logging.info("whatsapp_webhook otp_found=%s", bool(otp))
         service_title = (
             picked.display_name
