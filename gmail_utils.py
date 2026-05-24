@@ -1,21 +1,18 @@
 """Gmail credential management and OTP extraction for Azure Functions.
 
-Credentials are loaded from the ``GMAIL_CREDENTIALS_JSON`` environment variable
-(a JSON string matching the structure of ``tokens.json``) so they can be stored
-as an app setting in Azure.  When that variable is absent the module falls back
-to a local ``tokens.json`` file, which is handy during local development.
+Credentials must be supplied as a ``credential_payload`` dict when calling
+:func:`get_latest_otp`.  The dict must contain the keys ``token``,
+``refresh_token``, ``token_uri``, ``client_id``, and ``client_secret``.
 
 Usage::
 
     from gmail_utils import get_latest_otp
 
-    otp = get_latest_otp('subject:Netflix "inicio de sesión"')
+    otp = get_latest_otp('subject:Netflix "inicio de sesión"', credential_payload=mailbox.credential_payload)
 """
 
 import base64
-import json
 import logging
-import os
 import re
 
 import requests
@@ -26,82 +23,26 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
 _GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 
-# Env vars — cada campo de tokens.json como variable independiente
-_ENV_TOKEN         = "GMAIL_TOKEN"
-_ENV_REFRESH_TOKEN = "GMAIL_REFRESH_TOKEN"
-_ENV_TOKEN_URI     = "GMAIL_TOKEN_URI"
-_ENV_CLIENT_ID     = "GMAIL_CLIENT_ID"
-_ENV_CLIENT_SECRET = "GMAIL_CLIENT_SECRET"
+_REQUIRED_CREDENTIAL_KEYS = ("access_token", "refresh_token", "token_uri", "client_id", "client_secret")
 
 
 # ---------------------------------------------------------------------------
 # Credential helpers
 # ---------------------------------------------------------------------------
 
-def _load_credentials() -> Credentials | None:
-    """Load credentials from individual environment variables.
-
-    Variables required:
-        GMAIL_TOKEN          – access token
-        GMAIL_REFRESH_TOKEN  – refresh token
-        GMAIL_TOKEN_URI      – token endpoint (https://oauth2.googleapis.com/token)
-        GMAIL_CLIENT_ID      – OAuth client ID
-        GMAIL_CLIENT_SECRET  – OAuth client secret
-    """
-    token         = os.environ.get(_ENV_TOKEN)
-    refresh_token = os.environ.get(_ENV_REFRESH_TOKEN)
-    token_uri     = os.environ.get(_ENV_TOKEN_URI)
-    client_id     = os.environ.get(_ENV_CLIENT_ID)
-    client_secret = os.environ.get(_ENV_CLIENT_SECRET)
-
-    missing = [
-        name for name, val in {
-            _ENV_TOKEN: token,
-            _ENV_REFRESH_TOKEN: refresh_token,
-            _ENV_TOKEN_URI: token_uri,
-            _ENV_CLIENT_ID: client_id,
-            _ENV_CLIENT_SECRET: client_secret,
-        }.items() if not val
-    ]
-
-    if missing:
-        logging.warning("gmail_utils: missing env vars: %s", missing)
-        return None
-
-    logging.info("gmail_utils: credentials loaded from environment variables")
-    return Credentials(
-        token=token,
-        refresh_token=refresh_token,
-        token_uri=token_uri,
-        client_id=client_id,
-        client_secret=client_secret,
-        scopes=SCOPES,
-    )
-
-
-def get_valid_credentials() -> Credentials | None:
-    """Return valid (possibly refreshed) Gmail credentials, or ``None``."""
-    creds = _load_credentials()
-    if creds is None:
-        return None
-    return _ensure_valid(creds)
-
-
 def _credentials_from_payload(payload: dict) -> Credentials | None:
-    """
-    Build credentials from a JSON object (e.g. mailbox.credential_payload).
-    Accepts the same key names as environment variables, or `token`/`refresh_token`/etc.
-    """
+    """Build credentials from a JSON object (e.g. mailbox.credential_payload)."""
     if not payload:
         return None
-    token = payload.get(_ENV_TOKEN) or payload.get("token")
-    refresh_token = payload.get(_ENV_REFRESH_TOKEN) or payload.get("refresh_token")
-    token_uri = payload.get(_ENV_TOKEN_URI) or payload.get("token_uri")
-    client_id = payload.get(_ENV_CLIENT_ID) or payload.get("client_id")
-    client_secret = payload.get(_ENV_CLIENT_SECRET) or payload.get("client_secret")
-    if not all([token, refresh_token, token_uri, client_id, client_secret]):
-        logging.warning("gmail_utils: credential payload is incomplete")
+    missing = [k for k in _REQUIRED_CREDENTIAL_KEYS if not payload.get(k)]
+    if missing:
+        logging.warning("gmail_utils: credential payload missing keys: %s", missing)
         return None
+    token = payload["access_token"]
+    refresh_token = payload["refresh_token"]
+    token_uri = payload["token_uri"]
+    client_id = payload["client_id"]
+    client_secret = payload["client_secret"]
     return Credentials(
         token=token,
         refresh_token=refresh_token,
@@ -118,7 +59,8 @@ def _ensure_valid(creds: Credentials) -> Credentials | None:
         creds.refresh(GoogleRequest())
         logging.info("gmail_utils: token refreshed ok")
     elif creds.expired:
-        logging.warning("gmail_utils: token expired and no refresh_token available")
+        logging.warning(
+            "gmail_utils: token expired and no refresh_token available")
         return None
     logging.info("gmail_utils: credentials valid")
     return creds if creds.valid else None
@@ -156,19 +98,18 @@ def _extract_otp(text: str) -> str | None:
 def get_latest_otp(query: str, *, credential_payload: dict | None = None) -> str | None:
     """Search Gmail with *query* and return the OTP from the most recent match.
 
-    If *credential_payload* is provided, it is used instead of process environment
-    / ``GMAIL_TOKEN``-style app settings. Otherwise behavior matches :func:`get_valid_credentials`.
+    *credential_payload* is required and must contain the five OAuth fields.
 
     Returns ``None`` when credentials are unavailable, no messages match, or no
     numeric token can be extracted from the message body.
     """
     logging.info("gmail_utils: get_latest_otp query=%r", query)
 
-    if credential_payload is not None:
-        raw = _credentials_from_payload(credential_payload)
-        creds = _ensure_valid(raw) if raw is not None else None
-    else:
-        creds = get_valid_credentials()
+    if credential_payload is None:
+        logging.error("gmail_utils: aborting — credential_payload is required")
+        return None
+    raw = _credentials_from_payload(credential_payload)
+    creds = _ensure_valid(raw) if raw is not None else None
     if creds is None:
         logging.error("gmail_utils: aborting — no valid credentials")
         return None
@@ -189,7 +130,8 @@ def get_latest_otp(query: str, *, credential_payload: dict | None = None) -> str
 
     total = res.get("resultSizeEstimate", "?")
     message_id = res["messages"][0]["id"]
-    logging.info("gmail_utils: found ~%s message(s), fetching latest id=%s", total, message_id)
+    logging.info(
+        "gmail_utils: found ~%s message(s), fetching latest id=%s", total, message_id)
 
     msg = requests.get(
         f"{_GMAIL_API}/messages/{message_id}",
