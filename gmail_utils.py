@@ -23,7 +23,8 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
 _GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 
-_REQUIRED_CREDENTIAL_KEYS = ("access_token", "refresh_token", "token_uri", "client_id", "client_secret")
+_REQUIRED_CREDENTIAL_KEYS = (
+    "access_token", "refresh_token", "token_uri", "client_id", "client_secret")
 
 
 # ---------------------------------------------------------------------------
@@ -36,8 +37,14 @@ def _credentials_from_payload(payload: dict) -> Credentials | None:
         return None
     missing = [k for k in _REQUIRED_CREDENTIAL_KEYS if not payload.get(k)]
     if missing:
-        logging.warning("gmail_utils: credential payload missing keys: %s", missing)
+        logging.warning(
+            "gmail_utils: credential payload missing keys: %s", missing)
         return None
+    token = payload["access_token"]
+    refresh_token = payload["refresh_token"]
+    token_uri = payload["token_uri"]
+    client_id = payload["client_id"]
+    client_secret = payload["client_secret"]
     token = payload["access_token"]
     refresh_token = payload["refresh_token"]
     token_uri = payload["token_uri"]
@@ -54,13 +61,19 @@ def _credentials_from_payload(payload: dict) -> Credentials | None:
 
 
 def _ensure_valid(creds: Credentials) -> Credentials | None:
-    if creds.expired and creds.refresh_token:
-        logging.info("gmail_utils: token expired, refreshing...")
-        creds.refresh(GoogleRequest())
-        logging.info("gmail_utils: token refreshed ok")
-    elif creds.expired:
+    # Always refresh when a refresh_token is available. Stored access tokens
+    # are built without an expiry datetime, so creds.expired is always False
+    # even when the token is stale — forcing a refresh avoids 401s.
+    if creds.refresh_token:
+        try:
+            creds.refresh(GoogleRequest())
+            logging.info("gmail_utils: token refreshed ok")
+        except Exception as exc:
+            logging.error("gmail_utils: token refresh failed: %s", exc)
+            return None
+    elif not creds.valid:
         logging.warning(
-            "gmail_utils: token expired and no refresh_token available")
+            "gmail_utils: token invalid and no refresh_token available")
         return None
     logging.info("gmail_utils: credentials valid")
     return creds if creds.valid else None
@@ -123,6 +136,8 @@ def get_latest_otp(query: str, *, credential_payload: dict | None = None) -> str
         headers=headers,
         timeout=10,
     ).json()
+
+    logging.info("gmail_utils: res=%r", res)
 
     if "messages" not in res:
         logging.warning("gmail_utils: no messages found for query=%r", query)
