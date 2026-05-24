@@ -9,9 +9,9 @@ from pythonjsonlogger.json import JsonFormatter
 _CONFIGURED = False
 
 
-def configure_logging() -> None:
+def configure_logging(*, force: bool = False) -> None:
     global _CONFIGURED
-    if _CONFIGURED:
+    if _CONFIGURED and not force:
         return
 
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()

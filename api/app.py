@@ -1,10 +1,12 @@
+import logging
 import os
+from contextlib import asynccontextmanager
 
 from api.logging_setup import configure_logging
 
 configure_logging()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from starlette.middleware.cors import CORSMiddleware
 from supertokens_python import get_all_cors_headers
 from supertokens_python.framework.fastapi import get_middleware
@@ -24,7 +26,30 @@ from api.supertokens_init import init_supertokens
 
 init_supertokens()
 
-fastapi_app = FastAPI(title="wchatv0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    configure_logging(force=True)
+    yield
+
+
+fastapi_app = FastAPI(title="wchatv0", lifespan=lifespan)
+
+
+@fastapi_app.middleware("http")
+async def log_endpoint(request: Request, call_next):
+    response = await call_next(request)
+    route = request.scope.get("route")
+    if route is not None:
+        logging.info(
+            "request",
+            extra={
+                "endpoint": route.name,
+                "method": request.method,
+                "status_code": response.status_code,
+            },
+        )
+    return response
+
 
 fastapi_app.add_middleware(get_middleware())
 
