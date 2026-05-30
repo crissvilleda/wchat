@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import json
+import logging
+import os
+from urllib.parse import urlencode
+
+import aiohttp
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from supertokens_python.recipe.session import SessionContainer
 from supertokens_python.recipe.session.framework.fastapi import verify_session
@@ -13,6 +20,10 @@ from api.repositories.mailboxes import DbMailboxRepository
 from api.schemas.mailbox import MailboxCreate, MailboxOut, MailboxUpdate
 from api.schemas.pagination import CursorPage
 from api.services.mailboxes_service import MailboxesService
+
+_GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/auth"
+_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 from orm_models.mailbox import Mailbox
 
 
@@ -24,6 +35,91 @@ async def _mailbox_out(svc: MailboxesService, row: Mailbox) -> MailboxOut:
 
 
 router = APIRouter(prefix="/mailboxes", tags=["mailboxes"])
+
+
+@router.get("/gmail-auth-url")
+async def get_gmail_auth_url(
+    state: str = Query(..., min_length=1, max_length=256),
+    _: SessionContainer = Depends(verify_session()),
+) -> dict[str, str]:
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    redirect_uri = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI")
+    if not client_id or not redirect_uri:
+        raise HTTPException(status_code=500, detail="Google OAuth no está configurado en el servidor.")
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": _GMAIL_SCOPE,
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": state,
+    }
+    return {"auth_url": f"{_GOOGLE_AUTH_URL}?{urlencode(params)}"}
+
+
+@router.get("/gmail-callback")
+async def gmail_oauth_callback(
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> HTMLResponse:
+    safe_state = json.dumps(state or "")
+
+    if error or not code:
+        payload_js = f'{{"type":"gmail-oauth-error","state":{safe_state},"error":{json.dumps(error or "cancelled")}}}'
+    else:
+        client_id = os.environ.get("GOOGLE_CLIENT_ID")
+        client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+        redirect_uri = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI")
+        if not client_id or not client_secret or not redirect_uri:
+            payload_js = f'{{"type":"gmail-oauth-error","state":{safe_state},"error":"server_misconfigured"}}'
+        else:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        _GOOGLE_TOKEN_URL,
+                        data={
+                            "code": code,
+                            "client_id": client_id,
+                            "client_secret": client_secret,
+                            "redirect_uri": redirect_uri,
+                            "grant_type": "authorization_code",
+                        },
+                    ) as resp:
+                        token_data: dict = await resp.json(content_type=None)
+            except Exception as exc:
+                logging.error("gmail_oauth_callback: token exchange failed: %s", exc)
+                payload_js = f'{{"type":"gmail-oauth-error","state":{safe_state},"error":"token_exchange_failed"}}'
+            else:
+                if "error" in token_data:
+                    payload_js = f'{{"type":"gmail-oauth-error","state":{safe_state},"error":{json.dumps(token_data.get("error", "unknown"))}}}'
+                else:
+                    credential = {
+                        "access_token": token_data.get("access_token"),
+                        "refresh_token": token_data.get("refresh_token"),
+                        "token_uri": _GOOGLE_TOKEN_URL,
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                    }
+                    payload_js = f'{{"type":"gmail-oauth","state":{safe_state},"credential_payload":{json.dumps(credential)}}}'
+
+    html = f"""<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><title>Conectando…</title></head>
+<body>
+<script>
+(function(){{
+  try {{
+    window.opener.postMessage({payload_js}, window.location.origin);
+  }} catch(e) {{}}
+  window.close();
+}})();
+</script>
+<p style="font-family:sans-serif;text-align:center;margin-top:48px;color:#6e6961">Cerrando ventana…</p>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
 
 
 @router.post("", response_model=MailboxOut, status_code=status.HTTP_201_CREATED)
