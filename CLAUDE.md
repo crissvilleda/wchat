@@ -142,13 +142,34 @@ async def test_whatsapp_webhook_accepts_twilio_form_and_replies(monkeypatch):
 
 **Required for deployment:**
 ```
-TWILIO_ACCOUNT_SID       # Twilio account ID
-TWILIO_AUTH_TOKEN        # Twilio auth token
-GMAIL_TOKEN              # Gmail OAuth access token
-GMAIL_REFRESH_TOKEN      # Gmail refresh token
-GMAIL_TOKEN_URI          # Gmail token endpoint
-GMAIL_CLIENT_ID          # OAuth client ID
-GMAIL_CLIENT_SECRET      # OAuth client secret
+TWILIO_ACCOUNT_SID           # Twilio account ID
+TWILIO_AUTH_TOKEN            # Twilio auth token
+GMAIL_TOKEN                  # Gmail OAuth access token (legacy WhatsApp webhook path)
+GMAIL_REFRESH_TOKEN          # Gmail refresh token (legacy)
+GMAIL_TOKEN_URI              # Gmail token endpoint (legacy)
+GMAIL_CLIENT_ID              # OAuth client ID (legacy)
+GMAIL_CLIENT_SECRET          # OAuth client secret (legacy)
+```
+
+**Required for the Gmail mailbox OAuth flow (`/api/mailboxes/gmail-*`):**
+```
+GOOGLE_CLIENT_ID             # Google OAuth client ID
+GOOGLE_CLIENT_SECRET         # Google OAuth client secret
+GOOGLE_OAUTH_REDIRECT_URI    # Must be the BACKEND callback URL, e.g.:
+                             #   https://<functions-host>/api/mailboxes/gmail-callback
+                             # Register this exact URL in Google Cloud Console →
+                             #   APIs & Services → Credentials → OAuth client →
+                             #   Authorized Redirect URIs.
+                             # Do NOT point this at the frontend — the redirect happens
+                             # inside the popup, and Next.js rewrites only run on a
+                             # Node.js server (not on Azure Static Web Apps static hosting).
+OAUTH_STATE_SECRET           # Random secret (min 32 chars) used to sign the OAuth state
+                             # JWT that binds each auth request to the requesting entity.
+                             # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+FRONTEND_ORIGIN              # Frontend origin to use as the postMessage targetOrigin, e.g.:
+                             #   https://<app>.azurestaticapps.net
+                             # The Gmail callback HTML posts only a non-sensitive signal
+                             # to this origin; must match the frontend's actual domain.
 ```
 
 For local development, use `dotenvx run --` to inject secrets from the encrypted `.env` file. Keep `.env.keys` private and never commit it.

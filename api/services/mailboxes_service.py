@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
 from api.pagination.cursor import encode_id_cursor
 from api.repositories.mailboxes import MailboxRepository
@@ -72,6 +73,37 @@ class MailboxesService:
             token_expiry=token_expiry,
             revoked_at=revoked_at,
             max_customer_links=max_customer_links,
+        )
+
+    async def upsert_gmail_credentials(
+        self,
+        *,
+        entity_id: int,
+        mailbox_address: str,
+        credential_payload: dict,
+        token_scopes: str | None,
+        token_expiry: datetime | None,
+    ) -> Mailbox:
+        existing = await self._repo.get_by_entity_and_address(
+            entity_id=entity_id, mailbox_address=mailbox_address
+        )
+        if existing is not None:
+            return await self._repo.update_credentials(
+                entity_id=entity_id,
+                mailbox_id=existing.id,
+                credential_payload=credential_payload,
+                token_scopes=token_scopes,
+                token_expiry=token_expiry,
+            )
+        return await self._repo.create(
+            entity_id=entity_id,
+            provider="gmail",
+            mailbox_address=mailbox_address,
+            credential_payload=credential_payload,
+            secret_ref=None,
+            token_scopes=token_scopes,
+            token_expiry=token_expiry,
+            max_customer_links=None,
         )
 
     async def soft_delete(self, *, entity_id: int, mailbox_id: int) -> None:

@@ -108,6 +108,21 @@ def _extract_otp(text: str) -> str | None:
 # Public API
 # ---------------------------------------------------------------------------
 
+def get_profile_email(access_token: str) -> str | None:
+    """Return the email address of the authorized Gmail account."""
+    try:
+        res = requests.get(
+            f"{_GMAIL_API}/profile",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        res.raise_for_status()
+        return res.json().get("emailAddress")
+    except Exception as exc:
+        logging.error("gmail_utils: get_profile_email failed: %s", exc)
+        return None
+
+
 def get_latest_otp(query: str, *, credential_payload: dict | None = None) -> str | None:
     """Search Gmail with *query* and return the OTP from the most recent match.
 

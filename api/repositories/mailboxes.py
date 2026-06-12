@@ -67,6 +67,18 @@ class MailboxRepository(Protocol):
 
     async def unlink_customer(self, *, entity_id: int, mailbox_id: int, customer_id: int) -> None: ...
 
+    async def get_by_entity_and_address(self, *, entity_id: int, mailbox_address: str) -> Mailbox | None: ...
+
+    async def update_credentials(
+        self,
+        *,
+        entity_id: int,
+        mailbox_id: int,
+        credential_payload: dict,
+        token_scopes: str | None,
+        token_expiry: datetime | None,
+    ) -> Mailbox: ...
+
 
 class DbMailboxRepository:
     def __init__(self, db: AsyncSession) -> None:
@@ -183,6 +195,37 @@ class DbMailboxRepository:
 
     async def count_customer_links(self, *, mailbox_id: int) -> int:
         return await self._count_active_links(mailbox_id)
+
+    async def get_by_entity_and_address(self, *, entity_id: int, mailbox_address: str) -> Mailbox | None:
+        stmt = select(Mailbox).where(
+            Mailbox.entity_id == entity_id,
+            Mailbox.mailbox_address == mailbox_address,
+            Mailbox.deleted_at.is_(None),
+        )
+        return (await self._db.execute(stmt)).scalars().first()
+
+    async def update_credentials(
+        self,
+        *,
+        entity_id: int,
+        mailbox_id: int,
+        credential_payload: dict,
+        token_scopes: str | None,
+        token_expiry: datetime | None,
+    ) -> Mailbox:
+        row = await self.get(entity_id=entity_id, mailbox_id=mailbox_id)
+        row.credential_payload = credential_payload
+        if token_scopes is not None:
+            row.token_scopes = token_scopes
+        if token_expiry is not None:
+            row.token_expiry = token_expiry
+        row.revoked_at = None
+        try:
+            await self._db.flush()
+        except IntegrityError as e:
+            raise ConflictError("Update conflict") from e
+        await self._db.refresh(row)
+        return row
 
     async def _get_customer_in_entity(self, entity_id: int, customer_id: int) -> Customer:
         stmt = select(Customer).where(
