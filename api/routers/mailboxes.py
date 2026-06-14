@@ -238,9 +238,9 @@ async def update_mailbox(
     session_maker: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
 ) -> MailboxOut:
     async with session_maker() as db:
-        ctx = await resolve_tenant_context_http(db, st_session)
-        svc = MailboxesService(DbMailboxRepository(db))
         async with db.begin():
+            ctx = await resolve_tenant_context_http(db, st_session)
+            svc = MailboxesService(DbMailboxRepository(db))
             d = payload.model_dump(exclude_unset=True)
             if not d:
                 try:
@@ -265,7 +265,7 @@ async def update_mailbox(
                     raise HTTPException(status_code=404, detail=str(e)) from e
                 except ConflictError as e:
                     raise HTTPException(status_code=409, detail=str(e)) from e
-        return await _mailbox_out(svc, row)
+            return await _mailbox_out(svc, row)
 
 
 @router.delete("/{mailbox_id}", status_code=status.HTTP_204_NO_CONTENT)
