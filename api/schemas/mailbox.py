@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.schemas.common import AuditedOut
 
@@ -14,6 +14,7 @@ class MailboxCreate(BaseModel):
 
 
 class MailboxUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     max_customer_links: int | None = Field(default=None, ge=1)
 
 
