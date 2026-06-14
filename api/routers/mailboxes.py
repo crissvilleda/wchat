@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -9,7 +8,7 @@ from urllib.parse import urlencode
 import aiohttp
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from supertokens_python.recipe.session import SessionContainer
 from supertokens_python.recipe.session.framework.fastapi import verify_session
@@ -93,30 +92,9 @@ async def gmail_oauth_callback(
     state: str | None = None,
     error: str | None = None,
     session_maker: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
-) -> HTMLResponse:
-    frontend_origin = os.environ.get("FRONTEND_ORIGIN", "")
-
-    def _html(payload_js: str) -> HTMLResponse:
-        html = f"""<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="utf-8"><title>Conectando…</title></head>
-<body>
-<script>
-(function(){{
-  try {{
-    window.opener.postMessage({payload_js}, {json.dumps(frontend_origin)});
-  }} catch(e) {{}}
-  window.close();
-}})();
-</script>
-<p style="font-family:sans-serif;text-align:center;margin-top:48px;color:#6e6961">Cerrando ventana…</p>
-</body>
-</html>"""
-        return HTMLResponse(content=html)
-
+) -> JSONResponse:
     if error or not code or not state:
-        payload_js = f'{{"type":"gmail-oauth-error","state":"","error":{json.dumps(error or "cancelled")}}}'
-        return _html(payload_js)
+        return JSONResponse({"ok": False, "nonce": None, "error": error or "cancelled"}, status_code=400)
 
     secret = os.environ.get("OAUTH_STATE_SECRET", "")
     try:
@@ -125,17 +103,13 @@ async def gmail_oauth_callback(
         nonce: str = str(claims["nonce"])
     except Exception as exc:
         logging.warning("gmail_oauth_callback: invalid state JWT: %s", exc)
-        payload_js = '{"type":"gmail-oauth-error","state":"","error":"invalid_state"}'
-        return _html(payload_js)
-
-    safe_nonce = json.dumps(nonce)
+        return JSONResponse({"ok": False, "nonce": None, "error": "invalid_state"}, status_code=400)
 
     client_id = os.environ.get("GOOGLE_CLIENT_ID")
     client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
     redirect_uri = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI")
     if not client_id or not client_secret or not redirect_uri:
-        payload_js = f'{{"type":"gmail-oauth-error","state":{safe_nonce},"error":"server_misconfigured"}}'
-        return _html(payload_js)
+        return JSONResponse({"ok": False, "nonce": nonce, "error": "server_misconfigured"}, status_code=500)
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -152,19 +126,16 @@ async def gmail_oauth_callback(
                 token_data: dict = await resp.json(content_type=None)
     except Exception as exc:
         logging.error("gmail_oauth_callback: token exchange failed: %s", exc)
-        payload_js = f'{{"type":"gmail-oauth-error","state":{safe_nonce},"error":"token_exchange_failed"}}'
-        return _html(payload_js)
+        return JSONResponse({"ok": False, "nonce": nonce, "error": "token_exchange_failed"}, status_code=502)
 
     if "error" in token_data:
-        payload_js = f'{{"type":"gmail-oauth-error","state":{safe_nonce},"error":{json.dumps(token_data.get("error", "unknown"))}}}'
-        return _html(payload_js)
+        return JSONResponse({"ok": False, "nonce": nonce, "error": token_data.get("error", "unknown")}, status_code=400)
 
     access_token: str = token_data.get("access_token", "")
 
     mailbox_address = gmail_utils.get_profile_email(access_token)
     if not mailbox_address:
-        payload_js = f'{{"type":"gmail-oauth-error","state":{safe_nonce},"error":"profile_fetch_failed"}}'
-        return _html(payload_js)
+        return JSONResponse({"ok": False, "nonce": nonce, "error": "profile_fetch_failed"}, status_code=502)
 
     expires_in = token_data.get("expires_in")
     token_expiry = (
@@ -193,11 +164,9 @@ async def gmail_oauth_callback(
                 )
     except Exception as exc:
         logging.error("gmail_oauth_callback: upsert failed: %s", exc)
-        payload_js = f'{{"type":"gmail-oauth-error","state":{safe_nonce},"error":"save_failed"}}'
-        return _html(payload_js)
+        return JSONResponse({"ok": False, "nonce": nonce, "error": "save_failed"}, status_code=500)
 
-    payload_js = f'{{"type":"gmail-oauth","state":{safe_nonce},"ok":true,"mailbox_address":{json.dumps(mailbox_address)}}}'
-    return _html(payload_js)
+    return JSONResponse({"ok": True, "nonce": nonce, "mailbox_address": mailbox_address})
 
 
 @router.post("", response_model=MailboxOut, status_code=status.HTTP_201_CREATED)
